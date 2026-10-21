@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Link, useMatch, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { parseStep, STEP_PATTERNS, type Run, type Scenario, type ScenarioStep } from '@izaro/shared';
 import { api } from '../api';
@@ -24,6 +24,23 @@ export function ScenarioEditor() {
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(true);
   const editorSize = usePaneSize('editor', 38, 20, 70);
+  const patternsSize = usePaneSize('patterns', 35, 10, 80);
+  const [patternsOpen, setPatternsOpen] = useState(() => {
+    try {
+      return localStorage.getItem('izaro.patterns.open') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const togglePatterns = () => {
+    setPatternsOpen(!patternsOpen);
+    try {
+      localStorage.setItem('izaro.patterns.open', patternsOpen ? '0' : '1');
+    } catch {
+      // Remembering the choice is a convenience only.
+    }
+  };
+  const edit = useRef<HTMLElement>(null);
 
   useEffect(() => {
     setRuns([]);
@@ -92,8 +109,8 @@ export function ScenarioEditor() {
   const canRun = !!name && lines.length > 0 && problems.length === 0;
 
   return (
-    <div className="scenario-page" style={{ '--editor': `${editorSize.size}%` } as CSSProperties}>
-      <section className="scenario-edit">
+    <div className="scenario-page" style={{ '--editor': `${editorSize.size}%`, '--patterns': `${patternsSize.size}%` } as CSSProperties}>
+      <section className={`scenario-edit ${patternsOpen ? 'with-patterns' : ''}`} ref={edit}>
         <div className="panel-head">
           <input
             className="scenario-name"
@@ -132,24 +149,41 @@ export function ScenarioEditor() {
           </button>
           {!saved && <span className="muted small">Unsaved changes</span>}
         </div>
-        <details className="patterns">
-          <summary>Step patterns</summary>
-          <table className="table compact">
-            <tbody>
-              {STEP_PATTERNS.map((p) => (
-                <tr key={p.pattern}>
-                  <td>
-                    <code>{p.pattern}</code>
-                  </td>
-                  <td className="muted">{p.example}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="hint">
-            Labels in quotes are what you see on screen; they are matched to the screen library and found with jev-img. Secrets: <code>{'"{{secret:NAME}}"'}</code>.
-          </p>
-        </details>
+        {patternsOpen && (
+          <Splitter
+            axis="y"
+            size={patternsSize.size}
+            onSize={patternsSize.set}
+            onReset={patternsSize.reset}
+            direction={-1}
+            unitsPerPixel={() => 100 / (edit.current?.clientHeight || 1)}
+            label="Resize editor and step patterns"
+          />
+        )}
+        <section className={`patterns ${patternsOpen ? 'open' : ''}`}>
+          <button className="link patterns-toggle" onClick={togglePatterns} aria-expanded={patternsOpen}>
+            {patternsOpen ? '▾' : '▸'} Step patterns
+          </button>
+          {patternsOpen && (
+            <div className="patterns-body">
+              <table className="table compact">
+                <tbody>
+                  {STEP_PATTERNS.map((p) => (
+                    <tr key={p.pattern}>
+                      <td>
+                        <code>{p.pattern}</code>
+                      </td>
+                      <td className="muted">{p.example}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="hint">
+                Labels in quotes are what you see on screen; they are matched to the screen library and found with jev-img. Secrets: <code>{'"{{secret:NAME}}"'}</code>.
+              </p>
+            </div>
+          )}
+        </section>
       </section>
       <Splitter
         axis="x"
