@@ -10,6 +10,7 @@ import {
   type RecorderClientMessage,
   type RecorderServerMessage,
   type RecorderStep,
+  type Scenario,
   type Screen,
 } from '@izaro/shared';
 import { crop, launchBrowser, newContext, screenshot, settle } from '../browser.js';
@@ -37,6 +38,8 @@ export interface RecorderDeps extends ExecutorDeps {
 export class RecorderSession extends EventEmitter {
   readonly id = newId('rec');
   steps: RecorderStep[] = [];
+  /** Set when the setup scenario did not finish; recording still starts, from wherever the browser got to. */
+  notice?: string;
   private browser?: Browser;
   private page?: Page;
   private cdp?: CDPSession;
@@ -62,14 +65,10 @@ export class RecorderSession extends EventEmitter {
 
     const setup = this.project.setupScenarioId ? this.deps.store.getScenario(this.project.setupScenarioId) : undefined;
     if (setup) {
-      const exec = new Executor(this.deps, this.project, page);
-      for (const { step, error } of flatten(this.deps.store, this.project, setup)) {
-        const p = parseStep(step.text);
-        if (error || !p.ok) throw new Error(`Setup scenario "${setup.name}": ${error ?? (p as { error: string }).error}`);
-        const out = await exec.perform(p.action, step.hint);
-        if (out.status === 'failed' || out.status === 'error') throw new Error(`Setup scenario "${setup.name}" failed at: ${step.text}`);
-      }
-      this.steps.push({ text: stepText({ kind: 'run', scenario: setup.name }) });
+      const failed = await this.runSetup(page, setup).catch((e: Error) => e.message);
+      if (failed) {
+        this.notice = `The setup scenario "${setup.name}" did not finish (${failed}). Recording starts from the screen it reached and will not include "Run ${setup.name}". Fix that scenario, or choose another setup scenario on the project page.`;
+      } else this.steps.push({ text: stepText({ kind: 'run', scenario: setup.name }) });
     }
     if (this.startUrl) {
       await page.goto(new URL(this.startUrl, this.project.baseUrl).toString());
@@ -88,6 +87,17 @@ export class RecorderSession extends EventEmitter {
       maxWidth: this.project.viewport.width,
       maxHeight: this.project.viewport.height,
     });
+  }
+
+  /** Runs the setup scenario; returns why it stopped, or undefined when every step passed. */
+  private async runSetup(page: Page, setup: Scenario): Promise<string | undefined> {
+    const exec = new Executor(this.deps, this.project, page);
+    for (const { step, error } of flatten(this.deps.store, this.project, setup)) {
+      const p = parseStep(step.text);
+      if (error || !p.ok) return error ?? (p as { error: string }).error;
+      const out = await exec.perform(p.action, step.hint);
+      if (out.status === 'failed' || out.status === 'error') return `stopped at: ${step.text}`;
+    }
   }
 
   private emitMessage(msg: RecorderServerMessage) {

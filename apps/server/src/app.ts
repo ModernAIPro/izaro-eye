@@ -232,7 +232,7 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
   app.post<{ Params: { id: string }; Body: { startUrl?: string } }>('/api/projects/:id/recordings', async (req, reply) => {
     const p = mustProject(req.params.id);
     const s = await recorders.create(p, req.body?.startUrl || undefined);
-    return reply.code(201).send({ id: s.id, viewport: p.viewport, steps: s.steps });
+    return reply.code(201).send({ id: s.id, viewport: p.viewport, steps: s.steps, notice: s.notice });
   });
   app.get<{ Params: { id: string } }>('/api/recordings/:id/ws', { websocket: true }, (socket, req) => {
     const s = recorders.get(req.params.id);

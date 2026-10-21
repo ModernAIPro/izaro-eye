@@ -21,17 +21,19 @@ export function Recorder() {
   const [expectText, setExpectText] = useState('');
   const [secret, setSecret] = useState('AUT_PASSWORD');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [starting, setStarting] = useState(true);
   const slot = useSidePaneSlot();
 
   useEffect(() => {
     let closed = false;
     let sid: string | undefined;
-    api<{ id: string; viewport: Viewport }>(`/projects/${projectId}/recordings`, { method: 'POST', json: {} })
+    api<{ id: string; viewport: Viewport; notice?: string }>(`/projects/${projectId}/recordings`, { method: 'POST', json: {} })
       .then((s) => {
         if (closed) return api(`/recordings/${s.id}`, { method: 'DELETE' });
         sid = s.id;
         setSession(s);
+        setNotice(s.notice ?? '');
         const sock = new WebSocket(wsUrl(`/recordings/${s.id}/ws`));
         ws.current = sock;
         sock.onmessage = (ev) => onServer(JSON.parse(ev.data));
@@ -133,6 +135,7 @@ export function Recorder() {
           {busy && <span className="muted">capturing element…</span>}
         </div>
         {starting && <p className="muted">Starting browser (and running the setup scenario, if any)…</p>}
+        {notice && <p className="notice">{notice}</p>}
         {error && <p className="error">{error}</p>}
         {session && (
           <canvas
