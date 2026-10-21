@@ -1,10 +1,10 @@
 import { useCallback, useState, type CSSProperties } from 'react';
-import { Link, Navigate, Route, Routes, useMatch } from 'react-router-dom';
+import { Link, Navigate, Route, Routes, useMatch, useSearchParams } from 'react-router-dom';
 import { NewProject } from './pages/Projects';
 import { ProjectDetail } from './pages/ProjectDetail';
 import { Recorder } from './pages/Recorder';
 import { ScenarioEditor } from './pages/ScenarioEditor';
-import { RunDetail } from './pages/RunDetail';
+import { RunRedirect } from './pages/RunDetail';
 import { Home } from './pages/Home';
 import { LogsPane } from './workspace/LogsPane';
 import { ProjectTree } from './workspace/ProjectTree';
@@ -13,7 +13,9 @@ import { Splitter, usePaneSize } from './workspace/Splitter';
 
 /** One page: projects and scenarios on the left, the work in the centre, logs on the right. */
 export function App() {
-  const runMatch = useMatch('/runs/:id');
+  const [params] = useSearchParams();
+  const onScenario = useMatch('/scenarios/:id');
+  const runId = (onScenario && params.get('run')) || undefined;
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   const [claims, setClaims] = useState(0);
   const claim = useCallback(() => {
@@ -24,7 +26,7 @@ export function App() {
   const right = usePaneSize('right', 400, 260, 900);
 
   return (
-    <RunStreamProvider runId={runMatch?.params.id}>
+    <RunStreamProvider runId={runId}>
       <SidePaneContext.Provider value={{ slot, claim }}>
         <div className="workspace" style={{ '--left': `${left.size}px`, '--right': `${right.size}px` } as CSSProperties}>
           <header className="topbar">
@@ -46,7 +48,7 @@ export function App() {
               <Route path="/projects/:id/record" element={<Recorder />} />
               <Route path="/projects/:id/scenarios/new" element={<ScenarioEditor />} />
               <Route path="/scenarios/:id" element={<ScenarioEditor />} />
-              <Route path="/runs/:id" element={<RunDetail />} />
+              <Route path="/runs/:id" element={<RunRedirect />} />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </main>

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Navigate, useParams } from 'react-router-dom';
 import type { Rect, Scenario, StepResult } from '@izaro/shared';
 import { api, imageUrl } from '../api';
 import { StatusBadge } from '../components/StatusBadge';
@@ -15,7 +15,7 @@ const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(mi
  * Centre pane for a run: the browser live (or its video afterwards) and the steps, split by a drag handle.
  * The video panel takes the recording's shape: steps sit beside it when the pane is wide, below it otherwise.
  */
-export function RunDetail() {
+export function RunDetail({ embedded = false, picker }: { embedded?: boolean; picker?: ReactNode }) {
   const { run, results } = useRunStream();
   const [scenario, setScenario] = useState<Scenario>();
   const [selected, setSelected] = useState<string>();
@@ -60,17 +60,23 @@ export function RunDetail() {
 
   return (
     <div className="run-view">
-      <div className="panel-head">
-        <h2>
-          {scenario?.name ?? 'Run'} <StatusBadge status={run.status} />
-        </h2>
+      <div className="panel-head run-head">
+        {embedded ? (
+          <div className="row">
+            <StatusBadge status={run.status} />
+            {picker}
+          </div>
+        ) : (
+          <h2>
+            {scenario?.name ?? 'Run'} <StatusBadge status={run.status} />
+          </h2>
+        )}
         <div className="row small muted">
           {Object.entries(counts).map(([k, v]) => (
             <span key={k}>
               {v} {k}
             </span>
           ))}
-          {scenario && <Link to={`/scenarios/${scenario.id}`}>Edit scenario</Link>}
         </div>
       </div>
       {run.error && <p className="error">{run.error}</p>}
@@ -129,6 +135,18 @@ export function RunDetail() {
       </div>
     </div>
   );
+}
+
+/** Old run links (`/runs/:id`) open the run on its scenario's page. */
+export function RunRedirect() {
+  const { id } = useParams();
+  const [to, setTo] = useState<string>();
+  useEffect(() => {
+    api<{ run: { scenarioId: string } }>(`/runs/${id}`)
+      .then(({ run }) => setTo(`/scenarios/${run.scenarioId}?run=${id}`))
+      .catch(() => setTo('/'));
+  }, [id]);
+  return to ? <Navigate to={to} replace /> : <p className="muted">Loading…</p>;
 }
 
 function LiveView({ onSize }: { onSize: (width: number, height: number) => void }) {

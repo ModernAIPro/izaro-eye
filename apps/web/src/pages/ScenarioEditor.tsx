@@ -1,32 +1,57 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { Link, useMatch, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { parseStep, STEP_PATTERNS, type Run, type Scenario, type ScenarioStep } from '@izaro/shared';
 import { api } from '../api';
-import { StatusBadge } from '../components/StatusBadge';
+import { useRunStream } from '../workspace/RunStream';
+import { Splitter, usePaneSize } from '../workspace/Splitter';
+import { RunDetail } from './RunDetail';
 
-/** Edit or write a scenario: one sentence per line, checked as you type. */
+/**
+ * Write a scenario and run it on the same page: the sentences on the left, the run (live browser,
+ * video, steps) on the right. The run shown is `?run=`, or the latest one.
+ */
 export function ScenarioEditor() {
   const { id, id: projectParam } = useParams();
-  const isNew = location.pathname.endsWith('/new');
+  const isNew = !!useMatch('/projects/:id/scenarios/new');
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const runId = params.get('run');
+  const stream = useRunStream();
   const [scenario, setScenario] = useState<Scenario>();
   const [name, setName] = useState('');
   const [text, setText] = useState('');
   const [runs, setRuns] = useState<Run[]>([]);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(true);
+  const editorSize = usePaneSize('editor', 38, 20, 70);
 
   useEffect(() => {
-    if (isNew) return;
+    setRuns([]);
+    setError('');
+    if (isNew) {
+      setScenario(undefined);
+      setName('');
+      setText('');
+      return;
+    }
     api<Scenario>(`/scenarios/${id}`)
       .then((s) => {
         setScenario(s);
         setName(s.name);
         setText(s.steps.map((st) => st.text).join('\n'));
+        setSaved(true);
       })
       .catch((e) => setError(e.message));
-    api<Run[]>(`/scenarios/${id}/runs`).then(setRuns);
   }, [id, isNew]);
+
+  // Refresh the run list when a run starts or finishes, so its status stays current.
+  useEffect(() => {
+    if (isNew) return;
+    api<Run[]>(`/scenarios/${id}/runs`).then((rs) => {
+      setRuns(rs);
+      if (!runId && rs[0]) setParams({ run: rs[0].id }, { replace: true });
+    });
+  }, [id, isNew, runId, stream.run?.status]);
 
   const lines = useMemo(() => text.split('\n').filter((l) => l.trim()), [text]);
   const problems = lines.map((l, i) => ({ i, r: parseStep(l) })).filter((x) => !x.r.ok);
@@ -48,8 +73,8 @@ export function ScenarioEditor() {
         ? await api<Scenario>(`/projects/${projectParam}/scenarios`, { method: 'POST', json: { name, steps: toSteps() } })
         : await api<Scenario>(`/scenarios/${id}`, { method: 'PUT', json: { name, steps: toSteps() } });
       setSaved(true);
-      if (isNew) navigate(`/scenarios/${s.id}`, { replace: true });
       setScenario(s);
+      if (isNew) navigate(`/scenarios/${s.id}`, { replace: true });
       return s;
     } catch (e) {
       setError((e as Error).message);
@@ -60,29 +85,30 @@ export function ScenarioEditor() {
     const s = saved && scenario ? scenario : await save();
     if (!s) return;
     const r = await api<Run>(`/scenarios/${s.id}/runs`, { method: 'POST' });
-    navigate(`/runs/${r.id}`);
+    navigate(`/scenarios/${s.id}?run=${r.id}`);
   };
 
+  const running = stream.run && (stream.run.status === 'running' || stream.run.status === 'queued');
+  const canRun = !!name && lines.length > 0 && problems.length === 0;
+
   return (
-    <div className="grid-2 wide-left">
-      <section className="panel">
+    <div className="scenario-page" style={{ '--editor': `${editorSize.size}%` } as CSSProperties}>
+      <section className="scenario-edit">
         <div className="panel-head">
-          <h2>{isNew ? 'New scenario' : scenario?.name ?? '…'}</h2>
-          {scenario && <Link to={`/projects/${scenario.projectId}`}>← project</Link>}
-        </div>
-        <label className="form">
-          Name
           <input
+            className="scenario-name"
             value={name}
+            placeholder="Scenario name"
+            aria-label="Name"
             onChange={(e) => {
               setName(e.target.value);
               setSaved(false);
             }}
           />
-        </label>
+          {scenario && <Link to={`/projects/${scenario.projectId}`}>← project</Link>}
+        </div>
         <textarea
           className="scenario-text"
-          rows={Math.max(10, lines.length + 2)}
           value={text}
           spellCheck={false}
           placeholder={'Run "Sign in"\nClick "Shop individual and family plans"\nExpect the "Plans" screen'}
@@ -98,17 +124,16 @@ export function ScenarioEditor() {
         ))}
         {error && <pre className="error">{error}</pre>}
         <div className="row">
-          <button onClick={save} disabled={!name || lines.length === 0 || problems.length > 0 || saved}>
+          <button onClick={run} disabled={!canRun || !!running}>
+            {running ? 'Running…' : saved ? '▶ Run' : '▶ Save and run'}
+          </button>
+          <button className="secondary" onClick={save} disabled={!canRun || saved}>
             Save
           </button>
-          <button className="secondary" onClick={run} disabled={!name || lines.length === 0 || problems.length > 0}>
-            {saved ? 'Run' : 'Save and run'}
-          </button>
+          {!saved && <span className="muted small">Unsaved changes</span>}
         </div>
-      </section>
-      <div>
-        <section className="panel">
-          <h3>Step patterns</h3>
+        <details className="patterns">
+          <summary>Step patterns</summary>
           <table className="table compact">
             <tbody>
               {STEP_PATTERNS.map((p) => (
@@ -124,27 +149,34 @@ export function ScenarioEditor() {
           <p className="hint">
             Labels in quotes are what you see on screen; they are matched to the screen library and found with jev-img. Secrets: <code>{'"{{secret:NAME}}"'}</code>.
           </p>
-        </section>
-        {runs.length > 0 && (
-          <section className="panel">
-            <h3>Runs</h3>
-            <table className="table">
-              <tbody>
+        </details>
+      </section>
+      <Splitter
+        axis="x"
+        size={editorSize.size}
+        onSize={editorSize.set}
+        onReset={editorSize.reset}
+        unitsPerPixel={() => 100 / (document.querySelector('.scenario-page')?.clientWidth || 1)}
+        label="Resize editor and run"
+      />
+      <section className="scenario-run">
+        {runId ? (
+          <RunDetail
+            embedded
+            picker={
+              <select className="run-picker" aria-label="Run" value={runId} onChange={(e) => setParams({ run: e.target.value })}>
                 {runs.map((r) => (
-                  <tr key={r.id}>
-                    <td>
-                      <Link to={`/runs/${r.id}`}>{new Date(r.startedAt).toLocaleString()}</Link>
-                    </td>
-                    <td>
-                      <StatusBadge status={r.status} />
-                    </td>
-                  </tr>
+                  <option key={r.id} value={r.id}>
+                    {new Date(r.startedAt).toLocaleString()} · {r.status}
+                  </option>
                 ))}
-              </tbody>
-            </table>
-          </section>
+              </select>
+            }
+          />
+        ) : (
+          <p className="muted run-empty">{isNew ? 'Save the scenario, then run it to watch it here.' : 'Press Run to watch the scenario here.'}</p>
         )}
-      </div>
+      </section>
     </div>
   );
 }

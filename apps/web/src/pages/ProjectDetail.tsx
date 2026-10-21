@@ -23,7 +23,7 @@ export function ProjectDetail({ tab }: { tab: Tab }) {
   const run = async (s: Scenario) => {
     try {
       const r = await api<Run>(`/scenarios/${s.id}/runs`, { method: 'POST' });
-      navigate(`/runs/${r.id}`);
+      navigate(`/scenarios/${r.scenarioId}?run=${r.id}`);
     } catch (e) {
       setError((e as Error).message);
     }

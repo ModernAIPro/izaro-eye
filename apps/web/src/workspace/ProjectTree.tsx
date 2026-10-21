@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import type { Project, Run, Scenario } from '@izaro/shared';
 import { api } from '../api';
 
@@ -78,7 +78,7 @@ function ScenarioNode({ scenario, isSetup }: { scenario: Scenario; isSetup: bool
   const [runs, setRuns] = useState<Run[]>([]);
   useEffect(() => {
     if (open) api<Run[]>(`/scenarios/${scenario.id}/runs`).then((r) => setRuns(r.slice(0, 8)));
-  }, [open, scenario.id, location.pathname]);
+  }, [open, scenario.id, location.pathname, location.search]);
   return (
     <li>
       <button className="tree-toggle" onClick={() => setOpen(!open)}>
@@ -93,10 +93,13 @@ function ScenarioNode({ scenario, isSetup }: { scenario: Scenario; isSetup: bool
           {runs.length === 0 && <li className="muted small tree-empty">No runs yet</li>}
           {runs.map((r) => (
             <li key={r.id}>
-              <NavLink to={`/runs/${r.id}`} className={`tree-item run run-${r.status}`}>
+              <Link
+                to={`/scenarios/${scenario.id}?run=${r.id}`}
+                className={`tree-item run run-${r.status} ${location.pathname === `/scenarios/${scenario.id}` && new URLSearchParams(location.search).get('run') === r.id ? 'active' : ''}`}
+              >
                 <span className="run-icon">{STATUS_ICON[r.status] ?? '·'}</span>
                 {new Date(r.startedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-              </NavLink>
+              </Link>
             </li>
           ))}
         </ul>

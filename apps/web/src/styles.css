@@ -179,6 +179,21 @@ figcaption { font-size: 12px; color: var(--muted); }
 body.resizing-x, body.resizing-x * { cursor: col-resize !important; user-select: none; }
 body.resizing-y, body.resizing-y * { cursor: row-resize !important; user-select: none; }
 
+/* Scenario page: the sentences on the left, the run on the right */
+.pane-center:has(> .scenario-page) { overflow: hidden; display: flex; flex-direction: column; }
+.scenario-page { flex: 1; min-height: 0; display: flex; gap: 0; }
+.scenario-edit { flex: 0 0 var(--editor, 38%); min-width: 0; display: flex; flex-direction: column; gap: 8px; overflow: auto; padding-right: 6px; }
+.scenario-edit .scenario-text { flex: 1 1 auto; min-height: 220px; resize: none; margin: 0; }
+.scenario-name { font-size: 20px; font-weight: 600; border: 1px solid transparent; background: transparent; padding: 4px 6px; margin-left: -6px; flex: 1; min-width: 0; }
+.scenario-name:hover, .scenario-name:focus { border-color: var(--border); background: var(--panel); }
+.scenario-edit .patterns summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+.scenario-page > .splitter-x { flex: 0 0 9px; margin: 0 6px; background: linear-gradient(to right, transparent 4px, var(--border) 4px, var(--border) 5px, transparent 5px); }
+.scenario-page > .splitter-x:hover, .scenario-page > .splitter-x.dragging { background: var(--accent); }
+.scenario-run { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.run-picker { font-size: 12px; padding: 2px 6px; width: auto; }
+.run-head { margin-bottom: 6px; }
+.run-empty { margin: auto; text-align: center; }
+
 /* Run view: header, then video above steps with a handle between */
 .pane-center:has(> .run-view) { overflow: hidden; display: flex; flex-direction: column; }
 .run-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -213,6 +228,10 @@ body.resizing-y, body.resizing-y * { cursor: row-resize !important; user-select:
   .pane-center:has(> .run-view) { overflow: visible; display: block; }
   .run-split > .splitter { display: none; }
   .run-split.side { flex-direction: column; }
+  .pane-center:has(> .scenario-page) { overflow: visible; display: block; }
+  .scenario-page { flex-direction: column; }
+  .scenario-page > .splitter { display: none; }
+  .scenario-edit { flex-basis: auto; padding-right: 0; margin-bottom: 16px; }
   .stage { flex-basis: auto; }
   .steps-pane { overflow: visible; }
 }
