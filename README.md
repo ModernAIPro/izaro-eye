@@ -72,6 +72,10 @@ Docker: `docker build -t izaro-eye . && docker run -p 4000:4000 --env-file .env 
 
 Jev's image input and Box are beta and need the `TypeSafe-Danger-Zone-Images: true` header (sent automatically). Screenshots are fitted to Jev's limits (PNG, 280–1568 px per side) before upload. One call with two screenshots used about 13,000 input tokens in testing.
 
+## Project memory
+
+[docs/CONTEXT.md](docs/CONTEXT.md) has the goals, principles and architecture, and [docs/EPISODES.md](docs/EPISODES.md) has the dated history of changes and why they were made.
+
 ## Layout
 
 ```
