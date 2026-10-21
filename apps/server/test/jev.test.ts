@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PNG } from 'pngjs';
+import { JEV_LABELS } from '@izaro/shared';
 import { parseJevResponse, TypeSafeJevClassifier } from '../src/compare/jev.js';
 import { verdictFor } from '../src/compare/policy.js';
 import { pixelDiff } from '../src/compare/pixel.js';
@@ -47,6 +48,18 @@ describe('parseJevResponse', () => {
     expect(c).toMatchObject({ label: 'layout_regression', region: box, source: 'jev-img' });
     expect(c.confidence).toBeCloseTo(0.95);
   });
+  it('uses the category confidence the API returns', () => {
+    const c = parseJevResponse(
+      {
+        answers: {
+          same: { type: 'noul', noul: 0.02 },
+          category: { type: 'choice', choice: 'content_change', confidence: 0.81, probabilities: { content_change: 0.81, noise: 0.19 } },
+        },
+      },
+      input,
+    );
+    expect(c).toMatchObject({ label: 'content_change', confidence: 0.81 });
+  });
   it('falls back when the category is refused', () => {
     expect(parseJevResponse({ answers: { same: { noul: 0.7 } } }, input).label).toBe('noise');
   });
@@ -67,5 +80,6 @@ describe('TypeSafeJevClassifier', () => {
     const body = JSON.parse(init.body as string);
     expect(Object.keys(body.assets)).toEqual(['baseline', 'rerun']);
     expect(body.questions.changed.type).toBe('box');
+    expect(Object.keys(body.questions.category.criteria)).toEqual([...JEV_LABELS]);
   });
 });

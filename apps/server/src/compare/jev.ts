@@ -34,11 +34,11 @@ const LABEL_DESCRIPTIONS: Record<JevLabel, string> = {
  *   category choice - which JEV_LABELS entry best describes the change
  *   changed  box    - where the most significant change is in the rerun
  *
- * Request/response shapes follow the published systemone examples (questions
- * and answers keyed by name, assets referenced by name inside instructions).
- * Image input and Box are beta in Jev 1.14 and need the Danger-Zone header.
- * The `choice` question body is not in the public examples; verify it against
- * docs.typesafe.ai before relying on `category`.
+ * Request/response shapes were checked against the live systemone API: a
+ * `choice` question takes `criteria` (option -> description) and answers with
+ * `choice`, `confidence` and per-option `probabilities`; a `box` answer is
+ * fractions of image size plus a `confidence`. Image input and Box are beta in
+ * Jev 1.14 and need the Danger-Zone header.
  */
 export class TypeSafeJevClassifier implements ImageClassifier {
   readonly name = 'jev-img';
@@ -49,7 +49,6 @@ export class TypeSafeJevClassifier implements ImageClassifier {
   ) {}
 
   buildRequest(baseline: Buffer, candidate: Buffer, input: ClassifyInput) {
-    const labels = JEV_LABELS.map((l) => `${l}: ${LABEL_DESCRIPTIONS[l]}`).join('\n');
     return {
       model: this.opts.model,
       state:
@@ -71,8 +70,8 @@ export class TypeSafeJevClassifier implements ImageClassifier {
         },
         category: {
           type: 'choice',
-          instructions: `Which option best describes how \`rerun\` differs from \`baseline\`?\n${labels}`,
-          choices: [...JEV_LABELS],
+          instructions: 'Which option best describes how `rerun` differs from `baseline`?',
+          criteria: Object.fromEntries(JEV_LABELS.map((l) => [l, LABEL_DESCRIPTIONS[l]])),
         },
         changed: {
           type: 'box',
@@ -99,13 +98,20 @@ export class TypeSafeJevClassifier implements ImageClassifier {
   }
 }
 
-type Answer = { type?: string; noul?: number; choice?: string; answer?: string; box?: Region; confidence?: number };
+type Answer = {
+  type?: string;
+  noul?: number;
+  choice?: string;
+  probabilities?: Record<string, number>;
+  box?: Region;
+  confidence?: number;
+};
 
 export function parseJevResponse(body: unknown, input: ClassifyInput): Classification {
   const answers = ((body as { answers?: Record<string, Answer> })?.answers ?? {}) as Record<string, Answer>;
   const same = answers.same?.noul;
   const error = answers.error?.noul;
-  const picked = answers.category?.choice ?? answers.category?.answer;
+  const picked = answers.category?.choice;
   const region = answers.changed?.box ?? input.pixelRegion;
 
   // Strong yes/no answers override the category; refusals (missing answers)
@@ -113,7 +119,7 @@ export function parseJevResponse(body: unknown, input: ClassifyInput): Classific
   if (error !== undefined && error >= 0.8) return { label: 'error_page', confidence: error, region, source: 'jev-img' };
   if (same !== undefined && same >= 0.9) return { label: 'identical', confidence: same, region, source: 'jev-img' };
   if (picked && (JEV_LABELS as readonly string[]).includes(picked)) {
-    const confidence = same !== undefined ? 1 - same : 0.5;
+    const confidence = answers.category?.confidence ?? (same !== undefined ? 1 - same : 0.5);
     return { label: picked as JevLabel, confidence: Math.max(confidence, 0.5), region, source: 'jev-img' };
   }
   if (same !== undefined) {

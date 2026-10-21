@@ -49,7 +49,7 @@ Docker: `docker build -t izaro-eye . && docker run -p 4000:4000 --env-file .env 
 
 To confirm your key and the request format, run `pnpm --filter @izaro/server jev:check`. It sends one synthetic baseline/rerun pair and prints the raw response.
 
-Images and Box are beta in Jev 1.14 and need the `TypeSafe-Danger-Zone-Images: true` header (sent automatically). Screenshots are fitted to Jev's limits (PNG, 280–1568 px per side) before upload. The `choice` question shape is not in TypeSafe's public examples yet; verify it in `apps/server/src/compare/jev.ts` against docs.typesafe.ai before production use.
+Images and Box are beta in Jev 1.14 and need the `TypeSafe-Danger-Zone-Images: true` header (sent automatically). Screenshots are fitted to Jev's limits (PNG, 280–1568 px per side) before upload. The request and response shapes were checked against the live API with `jev-1.14.0`.
 
 ## Layout
 
