@@ -9,14 +9,23 @@ import { Splitter, usePaneSize } from '../workspace/Splitter';
 type Media = 'live' | 'video' | 'screenshot';
 type View = 'side' | 'overlay' | 'diff';
 
-/** Centre pane for a run: the browser live (or its video afterwards) above the steps, split by a drag handle. */
+const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+
+/**
+ * Centre pane for a run: the browser live (or its video afterwards) and the steps, split by a drag handle.
+ * The video panel takes the recording's shape: steps sit beside it when the pane is wide, below it otherwise.
+ */
 export function RunDetail() {
   const { run, results } = useRunStream();
   const [scenario, setScenario] = useState<Scenario>();
   const [selected, setSelected] = useState<string>();
   const [media, setMedia] = useState<Media>('live');
-  const stageSize = usePaneSize('stage', 60, 15, 85);
   const split = useRef<HTMLDivElement>(null);
+  const [aspect, setAspect] = useState(1280 / 800);
+  const [area, setArea] = useState({ w: 0, h: 0 });
+  // 0 means "fit the recording"; dragging stores a percentage, double-click goes back to fitting.
+  const sideSize = usePaneSize('stage-side', 0, 0, 85);
+  const stackSize = usePaneSize('stage-stack', 0, 0, 85);
   const active = run && (run.status === 'running' || run.status === 'queued');
 
   useEffect(() => {
@@ -27,6 +36,14 @@ export function RunDetail() {
     if (active) setMedia('live');
   }, [run?.id, active, run?.hasVideo]);
 
+  useEffect(() => {
+    const el = split.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setArea({ w: e.contentRect.width, h: e.contentRect.height }));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [!!run]);
+
   const review = async (r: StepResult, decision: 'accepted' | 'bug') => {
     await api<StepResult>(`/results/${r.id}/review`, { method: 'POST', json: { decision } });
   };
@@ -34,6 +51,11 @@ export function RunDetail() {
   if (!run) return <p className="muted">Loading…</p>;
   const current = results.find((r) => r.id === selected);
   const last = [...results].reverse().find((r) => r.imageKey);
+  const side = area.h > 0 && area.w / area.h > aspect * 1.3;
+  const pane = side ? sideSize : stackSize;
+  const fit = area.h > 0 ? (side ? (area.h * aspect) / area.w : area.w / aspect / area.h) * 100 : 60;
+  const stage = clamp(pane.size || fit, 15, 85);
+  const fromMedia = (w: number, h: number) => w > 0 && h > 0 && setAspect(w / h);
   const counts = results.reduce<Record<string, number>>((c, r) => ({ ...c, [r.status]: (c[r.status] ?? 0) + 1 }), {});
 
   return (
@@ -64,19 +86,30 @@ export function RunDetail() {
           Last screenshot
         </button>
       </div>
-      <div className="run-split" ref={split} style={{ '--stage': `${stageSize.size}%` } as CSSProperties}>
+      <div className={`run-split ${side ? 'side' : 'stack'}`} ref={split} style={{ '--stage': `${stage}%` } as CSSProperties}>
         <div className="stage">
-          {media === 'live' && <LiveView />}
-          {media === 'video' && run.hasVideo && <video key={run.id} src={`/api/runs/${run.id}/video`} controls autoPlay muted />}
-          {media === 'screenshot' && last?.imageKey && <img src={imageUrl(last.imageKey)} alt="last screenshot" />}
+          {media === 'live' && <LiveView onSize={fromMedia} />}
+          {media === 'video' && run.hasVideo && (
+            <video
+              key={run.id}
+              src={`/api/runs/${run.id}/video`}
+              controls
+              autoPlay
+              muted
+              onLoadedMetadata={(e) => fromMedia(e.currentTarget.videoWidth, e.currentTarget.videoHeight)}
+            />
+          )}
+          {media === 'screenshot' && last?.imageKey && (
+            <img src={imageUrl(last.imageKey)} alt="last screenshot" onLoad={(e) => fromMedia(e.currentTarget.naturalWidth, e.currentTarget.naturalHeight)} />
+          )}
           {media === 'live' && !active && <p className="muted stage-note">The run has finished. {run.hasVideo ? 'Watch the video.' : ''}</p>}
         </div>
         <Splitter
-          axis="y"
-          size={stageSize.size}
-          onSize={stageSize.set}
-          onReset={stageSize.reset}
-          unitsPerPixel={() => 100 / (split.current?.clientHeight || 1)}
+          axis={side ? 'x' : 'y'}
+          size={stage}
+          onSize={pane.set}
+          onReset={pane.reset}
+          unitsPerPixel={() => 100 / ((side ? split.current?.clientWidth : split.current?.clientHeight) || 1)}
           label="Resize video and steps"
         />
         <div className="steps-pane">
@@ -98,7 +131,7 @@ export function RunDetail() {
   );
 }
 
-function LiveView() {
+function LiveView({ onSize }: { onSize: (width: number, height: number) => void }) {
   const { onFrame } = useRunStream();
   const canvas = useRef<HTMLCanvasElement>(null);
   const [has, setHas] = useState(false);
@@ -109,12 +142,16 @@ function LiveView() {
         if (!c) return;
         if (c.width !== f.width) c.width = f.width;
         if (c.height !== f.height) c.height = f.height;
+        if (c.dataset.size !== `${f.width}x${f.height}`) {
+          c.dataset.size = `${f.width}x${f.height}`;
+          onSize(f.width, f.height);
+        }
         const img = new Image();
         img.onload = () => c.getContext('2d')?.drawImage(img, 0, 0);
         img.src = `data:image/jpeg;base64,${f.data}`;
         setHas(true);
       }),
-    [onFrame],
+    [onFrame, onSize],
   );
   return (
     <>

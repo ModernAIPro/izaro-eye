@@ -184,9 +184,18 @@ body.resizing-y, body.resizing-y * { cursor: row-resize !important; user-select:
 .run-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .run-view > .segmented { align-self: flex-start; }
 .run-split { flex: 1; min-height: 0; display: flex; flex-direction: column; margin-top: 8px; }
-.steps-pane { flex: 1; min-height: 0; overflow: auto; padding-top: 2px; }
+.steps-pane { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding-top: 2px; }
+.run-split.side { flex-direction: row; }
+.run-split.side .stage { justify-content: flex-start; }
+.run-split.side > .splitter-x { flex: 0 0 9px; margin: 0 4px; background: linear-gradient(to right, transparent 4px, var(--border) 4px, var(--border) 5px, transparent 5px); }
+.run-split.side > .splitter-x::before { content: ''; position: absolute; top: 50%; left: 2px; height: 36px; width: 5px; margin-top: -18px; border-radius: 3px; background: var(--border); }
+.run-split.side > .splitter-x:hover, .run-split.side > .splitter-x.dragging { background: var(--accent); }
+.run-split.side > .splitter-x:hover::before, .run-split.side > .splitter-x.dragging::before { background: var(--accent); }
+.run-split.side .steps-pane h3 { margin-top: 0; }
 .run-view h3 { margin: 4px 0 8px; }
-.stage { flex: 0 0 var(--stage, 60%); min-height: 80px; background: #111; border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
+.stage { flex: 0 0 var(--stage, 60%); min-height: 80px; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
+.stage canvas, .stage video, .stage img { border-radius: 6px; box-shadow: 0 0 0 1px var(--border), 0 2px 8px rgba(0,0,0,.08); background: #111; }
+.stage-note { background: #111; border-radius: 6px; align-self: stretch; text-align: center; }
 .stage canvas, .stage video, .stage img { max-width: 100%; max-height: 100%; width: auto; height: auto; min-height: 0; display: block; object-fit: contain; }
 .stage canvas.hidden { display: none; }
 .stage-note { color: #bbb; padding: 12px; }
@@ -203,6 +212,7 @@ body.resizing-y, body.resizing-y * { cursor: row-resize !important; user-select:
   .pane-left { border-right: 1px solid var(--border); }
   .pane-center:has(> .run-view) { overflow: visible; display: block; }
   .run-split > .splitter { display: none; }
+  .run-split.side { flex-direction: column; }
   .stage { flex-basis: auto; }
   .steps-pane { overflow: visible; }
 }
