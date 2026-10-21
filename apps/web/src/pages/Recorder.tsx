@@ -150,11 +150,10 @@ export function Recorder() {
             Start from{' '}
             <select
               value={startAfter}
-              disabled={starting}
-              onChange={(e) => {
-                if (steps.length > 1 && !confirm('Start over? The steps recorded so far will be discarded.')) return;
-                setStartAfter(e.target.value);
-              }}
+              // Changing it restarts the recording, so it is only offered before anything has been recorded.
+              disabled={starting || steps.length > (startAfter ? 2 : 1)}
+              title={steps.length > (startAfter ? 2 : 1) ? 'Save or leave this recording to start from somewhere else' : 'Changing this starts the recording over'}
+              onChange={(e) => setStartAfter(e.target.value)}
             >
               <option value="">the project's address</option>
               {scenarios.map((sc) => (

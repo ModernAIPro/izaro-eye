@@ -29,12 +29,12 @@ export function ProjectDetail({ tab }: { tab: Tab }) {
     }
   };
 
-  const setSetup = async (setupScenarioId: string) => {
-    // Changing it affects every run, so ask: a stray keystroke on the focused list would otherwise switch it silently.
-    const chosen = scenarios.find((s) => s.id === setupScenarioId);
-    const question = chosen ? `Run "${chosen.name}" before every other scenario?` : 'Stop running a setup scenario before the others?';
-    if (!confirm(question)) return;
-    setProject(await api<Project>(`/projects/${id}`, { method: 'PUT', json: { setupScenarioId: setupScenarioId || undefined } }));
+  // Picking a setup scenario only takes effect after Save, so a stray keystroke on the list can't switch it silently.
+  const [pendingSetup, setPendingSetup] = useState<string>();
+  const saveSetup = async () => {
+    // null (not undefined, which JSON drops) so that "none" really clears it.
+    setProject(await api<Project>(`/projects/${id}`, { method: 'PUT', json: { setupScenarioId: pendingSetup || null } }));
+    setPendingSetup(undefined);
   };
 
   if (!project) return <p>{error || 'Loading…'}</p>;
@@ -56,7 +56,10 @@ export function ProjectDetail({ tab }: { tab: Tab }) {
       </p>
       <label className="inline">
         Setup scenario (runs first, e.g. sign-in):{' '}
-        <select value={project.setupScenarioId ?? ''} onChange={(e) => setSetup(e.target.value)}>
+        <select
+          value={pendingSetup ?? project.setupScenarioId ?? ''}
+          onChange={(e) => setPendingSetup(e.target.value === (project.setupScenarioId ?? '') ? undefined : e.target.value)}
+        >
           <option value="">none</option>
           {scenarios.map((s) => (
             <option key={s.id} value={s.id}>
@@ -64,7 +67,23 @@ export function ProjectDetail({ tab }: { tab: Tab }) {
             </option>
           ))}
         </select>
+        {pendingSetup !== undefined && (
+          <>
+            {' '}
+            <button onClick={saveSetup}>Save</button>{' '}
+            <button className="secondary" onClick={() => setPendingSetup(undefined)}>
+              Cancel
+            </button>
+          </>
+        )}
       </label>
+      {pendingSetup !== undefined && (
+        <p className="hint">
+          {pendingSetup
+            ? `After saving, "${scenarios.find((s) => s.id === pendingSetup)?.name}" runs before every other scenario.`
+            : 'After saving, scenarios run on their own, with no setup scenario first.'}
+        </p>
+      )}
       {error && <p className="error">{error}</p>}
 
       <div className="segmented tabs">

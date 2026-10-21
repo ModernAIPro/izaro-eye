@@ -102,9 +102,12 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
     return reply.code(201).send(store.saveProject(project));
   });
   app.get<{ Params: { id: string } }>('/api/projects/:id', async (req) => mustProject(req.params.id));
-  app.put<{ Params: { id: string }; Body: Partial<Project> }>('/api/projects/:id', async (req) => {
+  app.put<{ Params: { id: string }; Body: Partial<Record<keyof Project, unknown>> }>('/api/projects/:id', async (req) => {
     const p = mustProject(req.params.id);
-    return store.saveProject({ ...p, ...req.body, id: p.id, createdAt: p.createdAt });
+    const next = { ...p, ...req.body, id: p.id, createdAt: p.createdAt } as Project;
+    // null clears an optional field (JSON has no undefined).
+    if (req.body?.setupScenarioId === null || req.body?.setupScenarioId === '') delete next.setupScenarioId;
+    return store.saveProject(next);
   });
   app.delete<{ Params: { id: string } }>('/api/projects/:id', async (req, reply) => {
     store.deleteProject(req.params.id);
