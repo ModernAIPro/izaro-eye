@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, type CSSProperties } from 'react';
 import { Link, Navigate, Route, Routes, useMatch } from 'react-router-dom';
 import { NewProject } from './pages/Projects';
 import { ProjectDetail } from './pages/ProjectDetail';
@@ -9,6 +9,7 @@ import { Home } from './pages/Home';
 import { LogsPane } from './workspace/LogsPane';
 import { ProjectTree } from './workspace/ProjectTree';
 import { RunStreamProvider, SidePaneContext } from './workspace/RunStream';
+import { Splitter, usePaneSize } from './workspace/Splitter';
 
 /** One page: projects and scenarios on the left, the work in the centre, logs on the right. */
 export function App() {
@@ -19,11 +20,13 @@ export function App() {
     setClaims((c) => c + 1);
     return () => setClaims((c) => c - 1);
   }, []);
+  const left = usePaneSize('left', 260, 160, 520);
+  const right = usePaneSize('right', 400, 260, 900);
 
   return (
     <RunStreamProvider runId={runMatch?.params.id}>
       <SidePaneContext.Provider value={{ slot, claim }}>
-        <div className="workspace">
+        <div className="workspace" style={{ '--left': `${left.size}px`, '--right': `${right.size}px` } as CSSProperties}>
           <header className="topbar">
             <Link to="/" className="brand">
               izaro-eye
@@ -33,6 +36,7 @@ export function App() {
           <aside className="pane pane-left">
             <ProjectTree />
           </aside>
+          <Splitter axis="x" size={left.size} onSize={left.set} onReset={left.reset} label="Resize navigation" />
           <main className="pane pane-center">
             <Routes>
               <Route path="/" element={<Home />} />
@@ -46,6 +50,7 @@ export function App() {
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </main>
+          <Splitter axis="x" size={right.size} onSize={right.set} onReset={right.reset} direction={-1} label="Resize logs" />
           <aside className="pane pane-right">
             <div ref={setSlot} className="side-slot" />
             {claims === 0 && <LogsPane />}

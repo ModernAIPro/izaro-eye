@@ -1,19 +1,22 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import type { Rect, Scenario, StepResult } from '@izaro/shared';
 import { api, imageUrl } from '../api';
 import { StatusBadge } from '../components/StatusBadge';
 import { useRunStream } from '../workspace/RunStream';
+import { Splitter, usePaneSize } from '../workspace/Splitter';
 
 type Media = 'live' | 'video' | 'screenshot';
 type View = 'side' | 'overlay' | 'diff';
 
-/** Centre pane for a run: the browser live (or its video afterwards), then the steps. */
+/** Centre pane for a run: the browser live (or its video afterwards) above the steps, split by a drag handle. */
 export function RunDetail() {
   const { run, results } = useRunStream();
   const [scenario, setScenario] = useState<Scenario>();
   const [selected, setSelected] = useState<string>();
   const [media, setMedia] = useState<Media>('live');
+  const stageSize = usePaneSize('stage', 60, 15, 85);
+  const split = useRef<HTMLDivElement>(null);
   const active = run && (run.status === 'running' || run.status === 'queued');
 
   useEffect(() => {
@@ -61,25 +64,36 @@ export function RunDetail() {
           Last screenshot
         </button>
       </div>
-      <div className="stage">
-        {media === 'live' && <LiveView />}
-        {media === 'video' && run.hasVideo && <video key={run.id} src={`/api/runs/${run.id}/video`} controls autoPlay muted />}
-        {media === 'screenshot' && last?.imageKey && <img src={imageUrl(last.imageKey)} alt="last screenshot" />}
-        {media === 'live' && !active && <p className="muted stage-note">The run has finished. {run.hasVideo ? 'Watch the video.' : ''}</p>}
+      <div className="run-split" ref={split} style={{ '--stage': `${stageSize.size}%` } as CSSProperties}>
+        <div className="stage">
+          {media === 'live' && <LiveView />}
+          {media === 'video' && run.hasVideo && <video key={run.id} src={`/api/runs/${run.id}/video`} controls autoPlay muted />}
+          {media === 'screenshot' && last?.imageKey && <img src={imageUrl(last.imageKey)} alt="last screenshot" />}
+          {media === 'live' && !active && <p className="muted stage-note">The run has finished. {run.hasVideo ? 'Watch the video.' : ''}</p>}
+        </div>
+        <Splitter
+          axis="y"
+          size={stageSize.size}
+          onSize={stageSize.set}
+          onReset={stageSize.reset}
+          unitsPerPixel={() => 100 / (split.current?.clientHeight || 1)}
+          label="Resize video and steps"
+        />
+        <div className="steps-pane">
+          <h3>Steps</h3>
+          <ol className="step-list">
+            {results.map((r) => (
+              <li key={r.id} className={`step-row status-${r.status} ${r.id === selected ? 'selected' : ''}`} onClick={() => setSelected(r.id === selected ? undefined : r.id)}>
+                <StatusBadge status={r.status} />
+                <span className="step-text">{r.text}</span>
+                {r.from && <span className="muted small">from {r.from}</span>}
+              </li>
+            ))}
+            {results.length === 0 && <li className="muted">Starting…</li>}
+          </ol>
+          {current && <ResultCard result={current} onReview={review} />}
+        </div>
       </div>
-
-      <h3>Steps</h3>
-      <ol className="step-list">
-        {results.map((r) => (
-          <li key={r.id} className={`step-row status-${r.status} ${r.id === selected ? 'selected' : ''}`} onClick={() => setSelected(r.id === selected ? undefined : r.id)}>
-            <StatusBadge status={r.status} />
-            <span className="step-text">{r.text}</span>
-            {r.from && <span className="muted small">from {r.from}</span>}
-          </li>
-        ))}
-        {results.length === 0 && <li className="muted">Starting…</li>}
-      </ol>
-      {current && <ResultCard result={current} onReview={review} />}
     </div>
   );
 }
