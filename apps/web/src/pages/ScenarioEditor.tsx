@@ -4,7 +4,7 @@ import { parseStep, STEP_PATTERNS, type Run, type Scenario, type ScenarioStep } 
 import { api } from '../api';
 import { useRunStream } from '../workspace/RunStream';
 import { Splitter, usePaneSize } from '../workspace/Splitter';
-import { RunDetail } from './RunDetail';
+import { RunDetail, useSetupName } from './RunDetail';
 
 /**
  * Write a scenario and run it on the same page: the sentences on the left, the run (live browser,
@@ -105,6 +105,7 @@ export function ScenarioEditor() {
     navigate(`/scenarios/${s.id}?run=${r.id}`);
   };
 
+  const setupName = useSetupName(scenario);
   const running = stream.run && (stream.run.status === 'running' || stream.run.status === 'queued');
   const canRun = !!name && lines.length > 0 && problems.length === 0;
 
@@ -149,6 +150,12 @@ export function ScenarioEditor() {
           </button>
           {!saved && <span className="muted small">Unsaved changes</span>}
         </div>
+        {setupName && scenario && (
+          <p className="setup-hint small">
+            Each run first runs the setup scenario <strong>{setupName}</strong>.{' '}
+            <Link to={`/projects/${scenario.projectId}`}>Change</Link>
+          </p>
+        )}
         {patternsOpen && (
           <Splitter
             axis="y"

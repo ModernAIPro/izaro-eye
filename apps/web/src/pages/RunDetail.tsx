@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Navigate, useParams } from 'react-router-dom';
-import type { Rect, Scenario, StepResult } from '@izaro/shared';
+import type { Project, Rect, Scenario, StepResult } from '@izaro/shared';
 import { api, imageUrl } from '../api';
 import { StatusBadge } from '../components/StatusBadge';
 import { useRunStream } from '../workspace/RunStream';
@@ -18,6 +18,7 @@ const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(mi
 export function RunDetail({ embedded = false, picker }: { embedded?: boolean; picker?: ReactNode }) {
   const { run, results } = useRunStream();
   const [scenario, setScenario] = useState<Scenario>();
+  const setupName = useSetupName(scenario);
   const [selected, setSelected] = useState<string>();
   const [media, setMedia] = useState<Media>('live');
   const split = useRef<HTMLDivElement>(null);
@@ -121,19 +122,96 @@ export function RunDetail({ embedded = false, picker }: { embedded?: boolean; pi
         <div className="steps-pane">
           <h3>Steps</h3>
           <ol className="step-list">
-            {results.map((r) => (
-              <li key={r.id} className={`step-row status-${r.status} ${r.id === selected ? 'selected' : ''}`} onClick={() => setSelected(r.id === selected ? undefined : r.id)}>
-                <StatusBadge status={r.status} />
-                <span className="step-text">{r.text}</span>
-                {r.from && <span className="muted small">from {r.from}</span>}
-              </li>
-            ))}
+            {groupSteps(results).map((g) =>
+              g.from ? (
+                <StepGroup
+                  key={g.items[0].id}
+                  title={g.from === setupName && g.items[0] === results[0] ? `Setup scenario: ${g.from}` : `Run "${g.from}"`}
+                  items={g.items}
+                  selected={selected}
+                  onSelect={setSelected}
+                />
+              ) : (
+                g.items.map((r) => <StepRow key={r.id} r={r} selected={selected} onSelect={setSelected} />)
+              ),
+            )}
             {results.length === 0 && <li className="muted">Starting…</li>}
           </ol>
           {current && <ResultCard result={current} onReview={review} />}
         </div>
       </div>
     </div>
+  );
+}
+
+/** The name of the project's setup scenario when it runs before `scenario` (not when it is that scenario). */
+export function useSetupName(scenario?: Scenario): string | undefined {
+  const [name, setName] = useState<string>();
+  useEffect(() => {
+    setName(undefined);
+    if (!scenario) return;
+    api<Project>(`/projects/${scenario.projectId}`)
+      .then((p) => (p.setupScenarioId && p.setupScenarioId !== scenario.id ? api<Scenario>(`/scenarios/${p.setupScenarioId}`) : undefined))
+      .then((s) => setName(s?.name))
+      .catch(() => {});
+  }, [scenario?.id, scenario?.projectId]);
+  return name;
+}
+
+/** Consecutive steps that came from the same reused scenario, so they can be folded under one header. */
+function groupSteps(results: StepResult[]) {
+  const groups: { from?: string; items: StepResult[] }[] = [];
+  for (const r of results) {
+    const from = r.from?.split(' › ')[0];
+    const last = groups[groups.length - 1];
+    if (last && last.from === from) last.items.push(r);
+    else groups.push({ from, items: [r] });
+  }
+  return groups;
+}
+
+interface RowProps {
+  selected?: string;
+  onSelect: (id: string | undefined) => void;
+}
+
+function StepRow({ r, selected, onSelect, nested }: RowProps & { r: StepResult; nested?: boolean }) {
+  const sub = nested && r.from?.includes(' › ') ? r.from.split(' › ').slice(1).join(' › ') : undefined;
+  return (
+    <li className={`step-row status-${r.status} ${r.id === selected ? 'selected' : ''}`} onClick={() => onSelect(r.id === selected ? undefined : r.id)}>
+      <StatusBadge status={r.status} />
+      <span className="step-text">{r.text}</span>
+      {!nested && r.from && <span className="muted small">from {r.from}</span>}
+      {sub && <span className="muted small">from {sub}</span>}
+    </li>
+  );
+}
+
+/** A folded block of steps from another scenario; opens by itself when something in it needs attention. */
+function StepGroup({ title, items, selected, onSelect }: RowProps & { title: string; items: StepResult[] }) {
+  const bad = items.some((r) => r.status === 'failed' || r.status === 'error');
+  const [open, setOpen] = useState(bad);
+  useEffect(() => {
+    if (bad) setOpen(true);
+  }, [bad]);
+  const counts = items.reduce<Record<string, number>>((c, r) => ({ ...c, [r.status]: (c[r.status] ?? 0) + 1 }), {});
+  return (
+    <li className="step-group">
+      <button className="step-group-head" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <span className="tree-caret">{open ? '▾' : '▸'}</span>
+        <span className="step-group-title">{title}</span>
+        <span className="muted small">
+          {items.length} steps · {Object.entries(counts).map(([k, v]) => `${v} ${k}`).join(', ')}
+        </span>
+      </button>
+      {open && (
+        <ol className="step-list nested">
+          {items.map((r) => (
+            <StepRow key={r.id} r={r} selected={selected} onSelect={onSelect} nested />
+          ))}
+        </ol>
+      )}
+    </li>
   );
 }
 
