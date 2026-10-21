@@ -71,7 +71,7 @@ export function Insights({ projectId }: { projectId: string }) {
       )}
 
       <div className="insight-grid">
-        <AiSummary projectId={projectId} available={data.aiAvailable} hasRuns={total > counts.notRun} />
+        {data.aiAvailable && <AiSummary projectId={projectId} hasRuns={total > counts.notRun} />}
         <Section title="Visual changes to review" aside={reviewSteps ? `${reviewSteps} step${reviewSteps === 1 ? '' : 's'}` : undefined}>
           {data.reviews.length === 0 ? (
             <Empty />
@@ -167,8 +167,8 @@ function Items({ items, showTime, empty }: { items: InsightItem[]; showTime?: bo
   );
 }
 
-/** A plain-language summary written by Claude on request, when the server has a key. */
-function AiSummary({ projectId, available, hasRuns }: { projectId: string; available: boolean; hasRuns: boolean }) {
+/** Optional: a plain-language summary written by Claude on request. Only shown when the server has ANTHROPIC_API_KEY. */
+function AiSummary({ projectId, hasRuns }: { projectId: string; hasRuns: boolean }) {
   const [summary, setSummary] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -184,12 +184,8 @@ function AiSummary({ projectId, available, hasRuns }: { projectId: string; avail
     }
   };
   return (
-    <Section title="AI summary" aside={available ? 'Claude' : undefined}>
-      {!available ? (
-        <p className="muted small">
-          Not configured. Set <code>ANTHROPIC_API_KEY</code> in <code>apps/server/.env</code> to get a plain-language summary of these results.
-        </p>
-      ) : summary ? (
+    <Section title="AI summary" aside="Claude">
+      {summary ? (
         <>
           <p className="ai-summary">{summary}</p>
           <button className="link small" onClick={ask} disabled={busy}>

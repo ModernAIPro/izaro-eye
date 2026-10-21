@@ -87,3 +87,7 @@ The request shape was checked against the live API, including the danger-zone im
 - *AI summary:* Claude writes a short summary from the computed numbers when `ANTHROPIC_API_KEY` is set on the server. TypeSafe Jev only answers visual questions, so it can't write the summary. Without a key the section says it is not configured. The live call wasn't exercised in the sandbox, which has no key.
 - *Not carried over from the sample:* quality gate and quarantine, which izaro-eye doesn't have.
 
+### 18. The AI summary is optional
+**Ask:** "disable ANTHROPIC_API_KEY - It is not mandatory feature. it is optional feature".
+**Done:** with no key, the Insights tab hides the AI summary section instead of showing "not configured". The server never loads the Anthropic SDK and answers 404 on the summary endpoint. `.env.example` has the key commented out, marked optional, and the README has a short "Optional: AI summary" section.
+

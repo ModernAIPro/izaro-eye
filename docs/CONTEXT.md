@@ -81,7 +81,7 @@ A project's **Insights** tab (`apps/server/src/insights.ts`, `GET /api/projects/
   - Most flaky: 3 or more pass/fail switches.
   - New scenarios.
 - Health: pass score × 0.6 + stability × 0.25 + performance × 0.15. Grades: A ≥ 90, B ≥ 80, C ≥ 70, D ≥ 60, otherwise F. Performance is the share of scenarios whose latest run took no more than 1.5× their median time.
-- **AI summary:** on request, Claude (`claude-opus-5-5`, low effort, with server-side refusal fallback) writes 3–5 sentences from the computed insights only (no screenshots or secrets). It needs `ANTHROPIC_API_KEY` in `apps/server/.env`; without it the tab says it is not configured. TypeSafe Jev is a vision model, so it isn't used for text.
+- **AI summary (optional, off by default):** on request, Claude (`claude-opus-5-5`, low effort, with server-side refusal fallback) writes 3–5 sentences from the computed insights only (no screenshots or secrets). It turns on only when `ANTHROPIC_API_KEY` is set in `apps/server/.env`; without it the section is hidden, the SDK is never loaded and nothing is sent to Anthropic. Pradeep: it is "not mandatory feature. it is optional feature". TypeSafe Jev is a vision model, so it isn't used for text.
 
 ## jev-img / TypeSafe
 

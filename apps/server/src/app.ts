@@ -324,7 +324,7 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
   app.post<{ Params: { id: string } }>('/api/projects/:id/insights/summary', async (req) => {
     const p = mustProject(req.params.id);
     const insights = insightsFor(p.id);
-    if (!insights.aiAvailable) throw badRequest('Set ANTHROPIC_API_KEY in apps/server/.env to get an AI summary');
+    if (!insights.aiAvailable) throw notFound('AI summary (optional; off without ANTHROPIC_API_KEY)');
     try {
       return { summary: await summarizeInsights(p.name, insights) };
     } catch (e) {

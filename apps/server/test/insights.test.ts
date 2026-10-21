@@ -76,7 +76,7 @@ describe('project insights', () => {
 });
 
 describe('insights API', () => {
-  it('serves insights, and says the AI summary needs a Claude key when none is set', async () => {
+  it('serves insights, and keeps the optional AI summary off when no Claude key is set', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'izaro-insights-'));
     const key = process.env.ANTHROPIC_API_KEY;
     const app = await buildApp({ dataDir, vision: new LocalVision() });
@@ -85,7 +85,7 @@ describe('insights API', () => {
       await app.inject({ method: 'POST', url: `/api/projects/${p.id}/scenarios`, payload: { name: 'S', steps: [{ text: 'Scroll down' }] } });
       const res = await app.inject({ method: 'GET', url: `/api/projects/${p.id}/insights` });
       expect(res.json()).toMatchObject({ scenarios: 1, counts: { notRun: 1 }, aiAvailable: !!key });
-      if (!key) expect((await app.inject({ method: 'POST', url: `/api/projects/${p.id}/insights/summary` })).statusCode).toBe(400);
+      if (!key) expect((await app.inject({ method: 'POST', url: `/api/projects/${p.id}/insights/summary` })).statusCode).toBe(404);
       expect((await app.inject({ method: 'GET', url: '/api/projects/nope/insights' })).statusCode).toBe(404);
     } finally {
       await app.close();

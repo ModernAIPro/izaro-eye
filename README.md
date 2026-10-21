@@ -70,6 +70,10 @@ Docker: `docker build -t izaro-eye . && docker run -p 4000:4000 --env-file .env 
 
 `pnpm --filter @izaro/server jev:check` asks each jev-img question once on synthetic screens and prints the answers and timings.
 
+## Optional: AI summary
+
+Set `ANTHROPIC_API_KEY` (and optionally `CLAUDE_MODEL`, default `claude-opus-5-5`) in `apps/server/.env` to add an **AI summary** to each project's Insights tab. It is off by default: without a key the section is hidden and nothing is sent to Anthropic. Everything else in izaro-eye works the same without it.
+
 Jev's image input and Box are beta and need the `TypeSafe-Danger-Zone-Images: true` header (sent automatically). Screenshots are fitted to Jev's limits (PNG, 280–1568 px per side) before upload. One call with two screenshots used about 13,000 input tokens in testing.
 
 ## Project memory

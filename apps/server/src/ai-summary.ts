@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk';
 import type { ProjectInsights } from '@izaro/shared';
 import { config } from './config.js';
 
@@ -6,9 +5,11 @@ const SYSTEM = `You summarise visual regression test results for a QA team. The 
 
 Write 3 to 5 short sentences in plain English for a test lead: the overall state, what most needs attention and why, and one concrete next step. Name scenarios in quotes. Do not repeat every number, do not use headings or lists, and do not invent causes the data doesn't show.`;
 
-/** Asks Claude for a short summary of the insights; undefined when no key is configured. */
+/** Optional: asks Claude for a short summary of the insights. Off (undefined) unless ANTHROPIC_API_KEY is set. */
 export async function summarizeInsights(projectName: string, insights: ProjectInsights): Promise<string | undefined> {
   if (!config.claude.apiKey) return undefined;
+  // Loaded only when the feature is on.
+  const { default: Anthropic } = await import('@anthropic-ai/sdk');
   const client = new Anthropic({ apiKey: config.claude.apiKey });
   // Only the computed insights are sent: names, statuses, durations and step errors. No screenshots, secrets or keys.
   const { aiAvailable: _, ...data } = insights;
