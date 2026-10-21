@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type WheelEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { Assertion, InspectedElement, RecorderClientMessage, RecorderServerMessage, Step, Viewport } from '@izaro/shared';
-import { api, wsUrl } from '../api';
+import { parseStep, UNLABELLED, type RecorderClientMessage, type RecorderServerMessage, type RecorderStep, type Viewport } from '@izaro/shared';
+import { api, imageUrl, wsUrl } from '../api';
 
-type Mode = 'interact' | 'assert';
 const BUTTONS = ['left', 'middle', 'right'] as const;
 
 export function Recorder() {
@@ -13,15 +12,15 @@ export function Recorder() {
   const ws = useRef<WebSocket>(null);
   const lastMove = useRef(0);
   const [session, setSession] = useState<{ id: string; viewport: Viewport }>();
-  const [steps, setSteps] = useState<Step[]>([]);
+  const [steps, setSteps] = useState<RecorderStep[]>([]);
   const [url, setUrl] = useState('');
-  const [mode, setMode] = useState<Mode>('interact');
-  const [picked, setPicked] = useState<InspectedElement | null>(null);
+  const [busy, setBusy] = useState(false);
   const [name, setName] = useState('');
+  const [expectText, setExpectText] = useState('');
+  const [secret, setSecret] = useState('AUT_PASSWORD');
   const [error, setError] = useState('');
   const [starting, setStarting] = useState(true);
 
-  // Start a recording session and connect to its stream.
   useEffect(() => {
     let closed = false;
     let sid: string | undefined;
@@ -51,7 +50,7 @@ export function Recorder() {
       img.src = `data:image/jpeg;base64,${m.data}`;
     } else if (m.type === 'steps') setSteps(m.steps);
     else if (m.type === 'url') setUrl(m.url);
-    else if (m.type === 'inspected') setPicked(m.element);
+    else if (m.type === 'busy') setBusy(m.busy);
     else if (m.type === 'error') setError(m.message);
   };
 
@@ -64,10 +63,6 @@ export function Recorder() {
   };
 
   const onMouse = (event: 'down' | 'up' | 'move') => (e: MouseEvent) => {
-    if (mode === 'assert') {
-      if (event === 'down') send({ type: 'inspect', ...point(e) });
-      return;
-    }
     if (event === 'move') {
       if (Date.now() - lastMove.current < 50) return;
       lastMove.current = Date.now();
@@ -77,27 +72,47 @@ export function Recorder() {
   };
 
   const onKey = (event: 'down' | 'up') => (e: KeyboardEvent) => {
-    if (mode !== 'interact' || e.key === 'Dead' || e.key === 'Unidentified') return;
+    if (e.key === 'Dead' || e.key === 'Unidentified') return;
     e.preventDefault();
     send({ type: 'key', event, key: e.key });
   };
 
-  const addAssertion = (assertion: Assertion) => {
-    if (!picked && assertion.kind !== 'url') return;
-    send({ type: 'assert', selectors: picked?.selectors ?? [], assertion });
-    setPicked(null);
+  /** Renaming one "?" also names every other step that used the same element. */
+  const editStep = (i: number, text: string) => {
+    const before = parseStep(steps[i].text);
+    const after = parseStep(text);
+    const el = steps[i].hint?.elementId;
+    const renamed =
+      before.ok && after.ok && 'target' in before.action && 'target' in after.action && before.action.target === UNLABELLED && el
+        ? (after.action as { target: string }).target
+        : undefined;
+    const next = steps.map((s, j) => {
+      if (j === i) return { ...s, text };
+      if (renamed && s.hint?.elementId === el) return { ...s, text: s.text.replace(`"${UNLABELLED}"`, `"${renamed}"`) };
+      return s;
+    });
+    setSteps(next);
+    send({ type: 'setSteps', steps: next });
+  };
+
+  const removeStep = (i: number) => {
+    const next = steps.filter((_, j) => j !== i);
+    setSteps(next);
+    send({ type: 'setSteps', steps: next });
   };
 
   const save = async () => {
     if (!session || !name) return;
     try {
-      const res = await api<{ test: { id: string }; run?: { id: string } }>(`/recordings/${session.id}/save`, { method: 'POST', json: { name } });
+      const s = await api<{ id: string }>(`/recordings/${session.id}/save`, { method: 'POST', json: { name, steps } });
       ws.current?.close();
-      navigate(res.run ? `/runs/${res.run.id}` : `/tests/${res.test.id}`);
+      navigate(`/scenarios/${s.id}`);
     } catch (e) {
       setError((e as Error).message);
     }
   };
+
+  const unnamed = steps.filter((s) => s.text.includes(`"${UNLABELLED}"`)).length;
 
   return (
     <div className="recorder">
@@ -110,23 +125,16 @@ export function Recorder() {
               send({ type: 'navigate', url });
             }}
           >
-            <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="URL" />
+            <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Address" />
           </form>
-          <div className="segmented">
-            <button className={mode === 'interact' ? 'active' : ''} onClick={() => setMode('interact')}>
-              Interact
-            </button>
-            <button className={mode === 'assert' ? 'active' : ''} onClick={() => setMode('assert')}>
-              Add assertion
-            </button>
-          </div>
+          {busy && <span className="muted">capturing element…</span>}
         </div>
-        {starting && <p className="muted">Starting browser…</p>}
+        {starting && <p className="muted">Starting browser (and running the setup scenario, if any)…</p>}
         {error && <p className="error">{error}</p>}
         {session && (
           <canvas
             ref={canvas}
-            className={`screen ${mode === 'assert' ? 'picking' : ''}`}
+            className="screen"
             width={session.viewport.width}
             height={session.viewport.height}
             tabIndex={0}
@@ -134,7 +142,7 @@ export function Recorder() {
             onMouseUp={onMouse('up')}
             onMouseMove={onMouse('move')}
             onContextMenu={(e) => e.preventDefault()}
-            onWheel={(e) => mode === 'interact' && send({ type: 'wheel', ...point(e), deltaX: e.deltaX, deltaY: e.deltaY })}
+            onWheel={(e) => send({ type: 'wheel', ...point(e), deltaX: e.deltaX, deltaY: e.deltaY })}
             onKeyDown={onKey('down')}
             onKeyUp={onKey('up')}
           />
@@ -142,63 +150,57 @@ export function Recorder() {
       </div>
 
       <aside className="recorder-side">
-        {mode === 'assert' && (
-          <div className="panel">
-            <h3>Assertion</h3>
-            {!picked && <p className="muted">Click an element in the page to assert on it.</p>}
-            {picked && <AssertionPicker element={picked} onAdd={addAssertion} />}
-            <button className="secondary" onClick={() => addAssertion({ kind: 'url', pattern: escapeRegex(url) })}>
-              Assert current URL
-            </button>
-          </div>
-        )}
         <div className="panel">
-          <h3>Steps ({steps.length})</h3>
-          <ol className="steps">
-            {steps.map((s) => (
-              <li key={s.id}>
-                <span className={`step-action step-${s.action}`}>{s.action}</span>
-                <span className="step-label">{s.label}</span>
-                {s.value && s.action !== 'press' && <code className="step-value">{s.secret ? '••••••' : s.value}</code>}
-                <button className="link" title="Remove step" onClick={() => send({ type: 'deleteStep', stepId: s.id })}>
-                  ✕
-                </button>
-              </li>
-            ))}
+          <h3>Scenario ({steps.length} steps)</h3>
+          <p className="hint">
+            Name each element marked <code>"?"</code> the way a user would describe it, e.g. <code>"Sign in"</code>.
+          </p>
+          <ol className="steps editable">
+            {steps.map((s, i) => {
+              const p = parseStep(s.text);
+              return (
+                <li key={i} className={!p.ok || s.text.includes(`"${UNLABELLED}"`) ? 'needs-name' : ''}>
+                  {s.cropKey && <img className="crop" src={imageUrl(s.cropKey)} alt="" />}
+                  <input value={s.text} onChange={(e) => editStep(i, e.target.value)} />
+                  <button className="link" title="Remove step" onClick={() => removeStep(i)}>
+                    ✕
+                  </button>
+                </li>
+              );
+            })}
           </ol>
         </div>
         <div className="panel">
-          <h3>Save test</h3>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Test name" />
-          <button onClick={save} disabled={!name || steps.length === 0}>
-            Save and create baseline
+          <h3>Add</h3>
+          <div className="row">
+            <input value={expectText} onChange={(e) => setExpectText(e.target.value)} placeholder="Text that must be on screen" />
+            <button
+              disabled={!expectText}
+              onClick={() => {
+                send({ type: 'expectText', text: expectText });
+                setExpectText('');
+              }}
+            >
+              Expect to see
+            </button>
+          </div>
+          <div className="row">
+            <input value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="Secret name" />
+            <button className="secondary" onClick={() => send({ type: 'secret', name: secret })}>
+              Insert secret
+            </button>
+          </div>
+          <p className="hint">Click a field first. The secret is typed from the server's environment and saved as a placeholder.</p>
+        </div>
+        <div className="panel">
+          <h3>Save scenario</h3>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Scenario name, e.g. Sign in" />
+          {unnamed > 0 && <p className="hint">{unnamed} step(s) still need an element name.</p>}
+          <button onClick={save} disabled={!name || steps.length === 0 || unnamed > 0}>
+            Save scenario
           </button>
         </div>
       </aside>
     </div>
   );
 }
-
-function AssertionPicker({ element, onAdd }: { element: InspectedElement; onAdd: (a: Assertion) => void }) {
-  const [text, setText] = useState(element.text);
-  useEffect(() => setText(element.text), [element]);
-  return (
-    <div className="picker">
-      <p>
-        <code>{element.selectors[0]}</code>
-      </p>
-      <button onClick={() => onAdd({ kind: 'visible' })}>Is visible</button>
-      <button onClick={() => onAdd({ kind: 'visual' })}>Visual checkpoint</button>
-      {element.value !== undefined && element.tag !== 'div' && (
-        <button onClick={() => onAdd({ kind: 'value', expected: element.value! })}>Value is "{element.value}"</button>
-      )}
-      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} />
-      <div className="row">
-        <button onClick={() => onAdd({ kind: 'text', op: 'contains', expected: text })}>Text contains</button>
-        <button onClick={() => onAdd({ kind: 'text', op: 'equals', expected: text })}>Text equals</button>
-      </div>
-    </div>
-  );
-}
-
-const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

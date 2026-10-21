@@ -1,20 +1,10 @@
 // Types shared by the server and the web UI.
 
+export * from './scenario.js';
+
 export interface Viewport {
   width: number;
   height: number;
-}
-
-/** Login performed before every recording and replay. Values may use {{env:NAME}}. */
-export interface ProjectAuth {
-  loginUrl: string;
-  usernameSelector: string;
-  passwordSelector: string;
-  submitSelector: string;
-  username: string;
-  password: string;
-  /** Selector that must be visible once login has succeeded. */
-  successSelector?: string;
 }
 
 export interface Project {
@@ -22,69 +12,74 @@ export interface Project {
   name: string;
   baseUrl: string;
   viewport: Viewport;
-  auth?: ProjectAuth;
+  /** Scenario run before every other scenario, e.g. signing in. */
+  setupScenarioId?: string;
   createdAt: string;
 }
 
-export type ActionType = 'navigate' | 'click' | 'fill' | 'select' | 'press' | 'check' | 'uncheck' | 'assert';
-
-export type Assertion =
-  | { kind: 'visible' }
-  | { kind: 'text'; op: 'equals' | 'contains'; expected: string }
-  | { kind: 'value'; expected: string }
-  | { kind: 'url'; pattern: string }
-  | { kind: 'visual' };
-
-export type ScreenshotMode = 'viewport' | 'element' | 'none';
-
-export interface Step {
-  id: string;
-  action: ActionType;
-  /** Candidate locators, best first. Replay tries them in order. */
-  selectors: string[];
-  value?: string;
-  /** True when value is a secret placeholder (e.g. a password field). */
-  secret?: boolean;
-  url?: string;
-  assertion?: Assertion;
-  screenshot: ScreenshotMode;
-  /** Selectors whose regions are masked before comparison. */
-  masks?: string[];
-  label: string;
+/** Pixel rectangle on a screenshot. */
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
-export interface TestCase {
+/** An element the user interacted with on a screen, kept as an image. */
+export interface ScreenElement {
+  id: string;
+  label: string;
+  rect: Rect;
+  cropKey: string;
+}
+
+/** One distinct screen of the application, captured while recording. */
+export interface Screen {
   id: string;
   projectId: string;
   name: string;
-  steps: Step[];
-  baselineId?: string;
+  url: string;
+  title: string;
+  imageKey: string;
+  elements: ScreenElement[];
+  /** Which element led to which screen. */
+  next: { elementId: string; screenId: string }[];
   createdAt: string;
   updatedAt: string;
 }
 
-export interface Baseline {
-  id: string;
-  testId: string;
-  version: number;
-  runId: string;
-  createdAt: string;
+/** Links a recorded step to the library so execution can use the element's image. */
+export interface StepHint {
+  screenId: string;
+  elementId?: string;
 }
 
-export type RunMode = 'baseline' | 'check';
+export interface ScenarioStep {
+  text: string;
+  hint?: StepHint;
+}
+
+export interface Scenario {
+  id: string;
+  projectId: string;
+  name: string;
+  steps: ScenarioStep[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type RunStatus = 'queued' | 'running' | 'passed' | 'failed' | 'review' | 'error';
 
 export interface Run {
   id: string;
-  testId: string;
-  mode: RunMode;
+  scenarioId: string;
   status: RunStatus;
   startedAt: string;
   finishedAt?: string;
   error?: string;
 }
 
-/** Labels jev-img can assign to a baseline/rerun pair. */
+/** Labels jev-img can assign to an expected/actual screen pair. */
 export const JEV_LABELS = [
   'identical',
   'cosmetic_change',
@@ -112,22 +107,40 @@ export interface Classification {
   notes?: string;
 }
 
+/** How a step's target was found on screen. */
+export interface FoundTarget {
+  label: string;
+  rect: Rect;
+  /** jev-img's certainty the element is present (1 for an exact image match). */
+  confidence: number;
+  method: 'exact-match' | 'jev-img';
+}
+
 export type StepStatus = 'passed' | 'failed' | 'review' | 'error' | 'skipped';
 export type ReviewDecision = 'accepted' | 'bug';
 
 export interface StepResult {
   id: string;
   runId: string;
-  stepId: string;
   index: number;
+  /** Step text, with any `Run "..."` steps expanded. */
+  text: string;
+  /** Nesting path when the step came from a reused scenario, e.g. "Sign in". */
+  from?: string;
   status: StepStatus;
   error?: string;
-  healedSelector?: string;
   imageKey?: string;
-  baselineImageKey?: string;
+  found?: FoundTarget;
+  /** Library element the step acted on, if known. */
+  elementId?: string;
+  /** For `Expect the "..." screen`. */
+  screenId?: string;
+  expectedImageKey?: string;
   diffImageKey?: string;
   diffRatio?: number;
   classification?: Classification;
+  /** For `Expect to see "..."`. */
+  textConfidence?: number;
   decision?: ReviewDecision;
 }
 
@@ -138,21 +151,18 @@ export type RecorderClientMessage =
   | { type: 'wheel'; x: number; y: number; deltaX: number; deltaY: number }
   | { type: 'key'; event: 'down' | 'up'; key: string }
   | { type: 'navigate'; url: string }
-  | { type: 'inspect'; x: number; y: number }
-  | { type: 'assert'; selectors: string[]; assertion: Assertion }
-  | { type: 'deleteStep'; stepId: string };
+  | { type: 'secret'; name: string }
+  | { type: 'expectText'; text: string }
+  | { type: 'setSteps'; steps: ScenarioStep[] };
 
-export interface InspectedElement {
-  selectors: string[];
-  tag: string;
-  text: string;
-  value?: string;
-  box: { x: number; y: number; width: number; height: number };
+export interface RecorderStep extends ScenarioStep {
+  /** Crop of the element the step acts on, for the UI. */
+  cropKey?: string;
 }
 
 export type RecorderServerMessage =
   | { type: 'frame'; data: string; width: number; height: number }
-  | { type: 'steps'; steps: Step[] }
+  | { type: 'steps'; steps: RecorderStep[] }
   | { type: 'url'; url: string }
-  | { type: 'inspected'; element: InspectedElement | null }
+  | { type: 'busy'; busy: boolean }
   | { type: 'error'; message: string };

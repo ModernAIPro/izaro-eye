@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PNG } from 'pngjs';
 import { JEV_LABELS } from '@izaro/shared';
-import { parseJevResponse, TypeSafeJevClassifier } from '../src/compare/jev.js';
+import { JevVision, parseJevResponse } from '../src/compare/jev.js';
 import { verdictFor } from '../src/compare/policy.js';
 import { pixelDiff } from '../src/compare/pixel.js';
 
@@ -68,10 +68,10 @@ describe('parseJevResponse', () => {
   });
 });
 
-describe('TypeSafeJevClassifier', () => {
+describe('JevVision', () => {
   it('sends both images with the image opt-in header', async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ answers: { same: { noul: 0.97 } } }), { status: 200 }));
-    const jev = new TypeSafeJevClassifier({ apiKey: 'k', url: 'https://example.test/v1/systemone', model: 'jev-1.14.0' }, fetchImpl as typeof fetch);
+    const jev = new JevVision({ apiKey: 'k', url: 'https://example.test/v1/systemone', model: 'jev-1.14.0' }, fetchImpl as typeof fetch);
     const img = solid(400, 300, [255, 255, 255]);
     const c = await jev.classify({ ...input, baseline: img, candidate: img });
     expect(c.label).toBe('identical');
@@ -81,5 +81,19 @@ describe('TypeSafeJevClassifier', () => {
     expect(Object.keys(body.assets)).toEqual(['baseline', 'rerun']);
     expect(body.questions.changed.type).toBe('box');
     expect(Object.keys(body.questions.category.criteria)).toEqual([...JEV_LABELS]);
+  });
+
+  it('pairs Box with a presence question and sends the library crop', async () => {
+    const box = { top: 0.1, bottom: 0.2, left: 0.3, right: 0.5 };
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ answers: { present: { noul: 0.91 }, where: { type: 'box', box, confidence: 0.7 } } })));
+    const jev = new JevVision({ apiKey: 'k', url: 'https://example.test/v1/systemone', model: 'jev-1.14.0' }, fetchImpl as typeof fetch);
+    const ans = await jev.findElement(solid(400, 300, [255, 255, 255]), { label: 'Shop plans', crop: solid(120, 40, [0, 0, 0]) });
+    expect(ans).toEqual({ present: 0.91, box, boxConfidence: 0.7 });
+    const body = JSON.parse((fetchImpl.mock.calls[0] as unknown as [string, RequestInit])[1].body as string);
+    expect(body.model).toBe('jev-1.14.0');
+    expect(Object.keys(body.assets)).toEqual(['screen', 'target']);
+    expect(body.questions.present.type).toBe('noul');
+    expect(body.questions.where.type).toBe('box');
+    expect(body.questions.where.instructions).toContain('"Shop plans"');
   });
 });

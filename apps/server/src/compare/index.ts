@@ -1,6 +1,6 @@
 import type { Classification, Region } from '@izaro/shared';
 import { config } from '../config.js';
-import type { ImageClassifier } from './jev.js';
+import type { Vision } from './jev.js';
 import { pixelDiff } from './pixel.js';
 
 export interface Comparison {
@@ -13,7 +13,7 @@ export interface Comparison {
 export async function compareScreenshots(
   baseline: Buffer,
   candidate: Buffer,
-  classifier: ImageClassifier,
+  classifier: Vision,
   context: { stepLabel: string; url?: string },
 ): Promise<Comparison> {
   const d = pixelDiff(baseline, candidate);

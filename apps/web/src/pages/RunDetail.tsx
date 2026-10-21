@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import type { Run, StepResult, TestCase } from '@izaro/shared';
+import type { Rect, Run, Scenario, StepResult } from '@izaro/shared';
 import { api, imageUrl, wsUrl } from '../api';
 import { StatusBadge } from '../components/StatusBadge';
 
@@ -10,7 +10,7 @@ export function RunDetail() {
   const { id } = useParams();
   const [run, setRun] = useState<Run>();
   const [results, setResults] = useState<StepResult[]>([]);
-  const [test, setTest] = useState<TestCase>();
+  const [scenario, setScenario] = useState<Scenario>();
 
   useEffect(() => {
     const sock = new WebSocket(wsUrl(`/runs/${id}/events`));
@@ -23,8 +23,8 @@ export function RunDetail() {
   }, [id]);
 
   useEffect(() => {
-    if (run && !test) api<TestCase>(`/tests/${run.testId}`).then(setTest);
-  }, [run, test]);
+    if (run && !scenario) api<Scenario>(`/scenarios/${run.scenarioId}`).then(setScenario);
+  }, [run, scenario]);
 
   const review = async (r: StepResult, decision: 'accepted' | 'bug') => {
     const updated = await api<StepResult>(`/results/${r.id}/review`, { method: 'POST', json: { decision } });
@@ -32,49 +32,63 @@ export function RunDetail() {
   };
 
   if (!run) return <p>Loading…</p>;
-  const stepLabel = (stepId: string) => test?.steps.find((s) => s.id === stepId)?.label ?? stepId;
-
   return (
     <section className="panel">
       <div className="panel-head">
         <h2>
-          {run.mode === 'baseline' ? 'Baseline run' : 'Regression run'} <StatusBadge status={run.status} />
+          {scenario?.name ?? 'Run'} <StatusBadge status={run.status} />
         </h2>
-        {test && <Link to={`/tests/${test.id}`}>← {test.name}</Link>}
+        {scenario && <Link to={`/scenarios/${scenario.id}`}>← scenario</Link>}
       </div>
       {run.error && <p className="error">{run.error}</p>}
       <div className="results">
         {results.map((r) => (
-          <ResultCard key={r.id} result={r} label={stepLabel(r.stepId)} onReview={review} />
+          <ResultCard key={r.id} result={r} onReview={review} />
         ))}
       </div>
     </section>
   );
 }
 
-function ResultCard({ result: r, label, onReview }: { result: StepResult; label: string; onReview: (r: StepResult, d: 'accepted' | 'bug') => void }) {
+function Box({ rect, width, height }: { rect: Rect; width: number; height: number }) {
+  return (
+    <div
+      className="region found"
+      style={{ left: `${(rect.x / width) * 100}%`, top: `${(rect.y / height) * 100}%`, width: `${(rect.width / width) * 100}%`, height: `${(rect.height / height) * 100}%` }}
+    />
+  );
+}
+
+function ResultCard({ result: r, onReview }: { result: StepResult; onReview: (r: StepResult, d: 'accepted' | 'bug') => void }) {
   const [view, setView] = useState<View>('side');
   const [opacity, setOpacity] = useState(50);
+  const [size, setSize] = useState<{ w: number; h: number }>();
   const c = r.classification;
-  const changed = c && c.label !== 'identical';
+  const screenChanged = r.expectedImageKey && c && c.label !== 'identical';
+  const reviewable = r.status === 'review' || (r.status === 'failed' && (screenChanged || r.textConfidence !== undefined));
   return (
     <div className={`result result-${r.status}`}>
       <div className="result-head">
         <span>
-          {r.index + 1}. {label}
+          {r.index + 1}. {r.text}
+          {r.from && <span className="muted"> · from {r.from}</span>}
         </span>
         <StatusBadge status={r.status} />
       </div>
       {r.error && <p className="error">{r.error}</p>}
-      {r.healedSelector && <p className="hint">Primary selector failed; healed with <code>{r.healedSelector}</code></p>}
+      {r.found && (
+        <p className="hint">
+          Found "{r.found.label}" {r.found.method === 'exact-match' ? 'by exact image match' : `with jev-img, ${(r.found.confidence * 100).toFixed(0)}% sure`}
+        </p>
+      )}
+      {r.textConfidence !== undefined && <p className="hint">jev-img: {(r.textConfidence * 100).toFixed(0)}% sure the text is on screen</p>}
       {c && (
         <p className="classification">
           <strong>{c.label.replace(/_/g, ' ')}</strong> · {(c.confidence * 100).toFixed(0)}% · via {c.source}
           {r.diffRatio !== undefined && <> · {(r.diffRatio * 100).toFixed(2)}% pixels changed</>}
-          {c.notes && <span className="muted"> · {c.notes}</span>}
         </p>
       )}
-      {changed && r.baselineImageKey && r.imageKey && (
+      {screenChanged && r.imageKey && (
         <>
           <div className="segmented small">
             {(['side', 'overlay', 'diff'] as View[]).map((v) => (
@@ -86,11 +100,11 @@ function ResultCard({ result: r, label, onReview }: { result: StepResult; label:
           {view === 'side' && (
             <div className="side-by-side">
               <figure>
-                <img src={imageUrl(r.baselineImageKey)} alt="baseline" />
-                <figcaption>baseline</figcaption>
+                <img src={imageUrl(r.expectedImageKey!)} alt="library screen" />
+                <figcaption>screen library</figcaption>
               </figure>
               <figure className="region-wrap">
-                <img src={imageUrl(r.imageKey)} alt="rerun" />
+                <img src={imageUrl(r.imageKey)} alt="this run" />
                 {c?.region && (
                   <div
                     className="region"
@@ -102,32 +116,37 @@ function ResultCard({ result: r, label, onReview }: { result: StepResult; label:
                     }}
                   />
                 )}
-                <figcaption>rerun</figcaption>
+                <figcaption>this run</figcaption>
               </figure>
             </div>
           )}
           {view === 'overlay' && (
             <div>
               <div className="overlay">
-                <img src={imageUrl(r.baselineImageKey)} alt="baseline" />
-                <img src={imageUrl(r.imageKey)} alt="rerun" style={{ opacity: opacity / 100 }} />
+                <img src={imageUrl(r.expectedImageKey!)} alt="library screen" />
+                <img src={imageUrl(r.imageKey)} alt="this run" style={{ opacity: opacity / 100 }} />
               </div>
               <input type="range" min={0} max={100} value={opacity} onChange={(e) => setOpacity(+e.target.value)} />
             </div>
           )}
           {view === 'diff' && r.diffImageKey && <img className="full" src={imageUrl(r.diffImageKey)} alt="diff" />}
-          {!r.decision && (
-            <div className="row">
-              <button onClick={() => onReview(r, 'accepted')}>Accept as new baseline</button>
-              <button className="danger" onClick={() => onReview(r, 'bug')}>
-                Mark as bug
-              </button>
-            </div>
-          )}
-          {r.decision && <p className="muted">Reviewed: {r.decision}</p>}
         </>
       )}
-      {!changed && r.imageKey && <img className="thumb" src={imageUrl(r.imageKey)} alt="screenshot" />}
+      {!screenChanged && r.imageKey && (
+        <figure className="region-wrap thumb-wrap">
+          <img className="thumb" src={imageUrl(r.imageKey)} alt="screenshot" onLoad={(e) => setSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })} />
+          {r.found && r.found.method === 'jev-img' && size && <Box rect={r.found.rect} width={size.w} height={size.h} />}
+        </figure>
+      )}
+      {reviewable && !r.decision && (
+        <div className="row">
+          <button onClick={() => onReview(r, 'accepted')}>{screenChanged ? 'Accept as new library screen' : 'Accept'}</button>
+          <button className="danger" onClick={() => onReview(r, 'bug')}>
+            Mark as bug
+          </button>
+        </div>
+      )}
+      {r.decision && <p className="muted">Reviewed: {r.decision}</p>}
     </div>
   );
 }

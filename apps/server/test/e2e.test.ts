@@ -5,129 +5,255 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import type { Project, RecorderServerMessage, Run, StepResult } from '@izaro/shared';
+import { chromium, type Page } from 'playwright';
+import type { Project, RecorderStep, Region, Run, Scenario, StepResult } from '@izaro/shared';
 import { buildApp } from '../src/app.js';
-import { HeuristicClassifier } from '../src/compare/jev.js';
+import { config } from '../src/config.js';
+import { LocalVision, type FindAnswer, type FindQuery } from '../src/compare/jev.js';
+import type { RecorderSession } from '../src/recorder/session.js';
 // @ts-expect-error plain JS example app
 import { createServer } from '../../../examples/demo-aut/server.js';
+
+const viewport = { width: 1000, height: 700 };
+
+/**
+ * Stands in for jev-img. Real jev-img reads screenshots; this fake answers
+ * from boxes the test measured on the demo app, so the test is about
+ * izaro-eye's behaviour, not Jev's accuracy.
+ */
+class FakeJev extends LocalVision {
+  readonly name = 'fake-jev';
+  controls = new Map<string, Region>();
+  texts = new Set<string>();
+  finds: string[] = [];
+  async findElement(_s: Buffer, q: FindQuery): Promise<FindAnswer> {
+    this.finds.push(q.label);
+    const box = this.controls.get(q.label);
+    return box ? { present: 0.95, box } : { present: 0.05 };
+  }
+  async seesText(_s: Buffer, text: string) {
+    return this.texts.has(text) ? 0.95 : 0.05;
+  }
+  async elementAt(_s: Buffer, p: { x: number; y: number }) {
+    for (const box of this.controls.values()) {
+      if (p.x >= box.left * viewport.width && p.x <= box.right * viewport.width && p.y >= box.top * viewport.height && p.y <= box.bottom * viewport.height) return box;
+    }
+    return null;
+  }
+}
+
+const SELECTORS: Record<string, string> = {
+  Username: '#username',
+  Password: '#password',
+  'Sign in': '[data-testid="login-submit"]',
+  Item: '#item',
+  'Place order': 'button:has-text("Place order")',
+};
 
 let aut: Server;
 let autUrl: string;
 let app: FastifyInstance;
+const jev = new FakeJev();
 
 const setVariant = (variant: string) => fetch(`${autUrl}/__variant`, { method: 'POST', body: JSON.stringify({ variant }) });
 
+/** Measures the demo app's controls (test-only use of the DOM) for the fake. */
+async function measure() {
+  const browser = await chromium.launch({ executablePath: config.chromiumPath });
+  const page = await browser.newPage({ viewport });
+  const grab = async (labels: string[]) => {
+    for (const label of labels) {
+      const b = (await page.locator(SELECTORS[label]).boundingBox())!;
+      jev.controls.set(label, { left: b.x / viewport.width, right: (b.x + b.width) / viewport.width, top: b.y / viewport.height, bottom: (b.y + b.height) / viewport.height });
+    }
+  };
+  await page.goto(`${autUrl}/login`);
+  await grab(['Username', 'Password', 'Sign in']);
+  await page.fill('#username', 'admin');
+  await page.fill('#password', 'admin');
+  await page.click('[data-testid="login-submit"]');
+  await page.waitForURL(/dashboard/);
+  await grab(['Item', 'Place order']);
+  await browser.close();
+}
+
 async function waitForRun(id: string): Promise<{ run: Run; results: StepResult[] }> {
   for (;;) {
-    const res = await app.inject({ method: 'GET', url: `/api/runs/${id}` });
-    const body = res.json();
+    const body = (await app.inject({ method: 'GET', url: `/api/runs/${id}` })).json();
     if (!['queued', 'running'].includes(body.run.status)) return body;
     await new Promise((r) => setTimeout(r, 200));
   }
 }
 
+async function run(scenario: Scenario) {
+  const r = (await app.inject({ method: 'POST', url: `/api/scenarios/${scenario.id}/runs` })).json();
+  return waitForRun(r.id);
+}
+
+function centre(label: string) {
+  const b = jev.controls.get(label)!;
+  return { x: ((b.left + b.right) / 2) * viewport.width, y: ((b.top + b.bottom) / 2) * viewport.height };
+}
+
+async function click(rec: RecorderSession, label: string) {
+  const p = centre(label);
+  await rec.handle({ type: 'mouse', event: 'down', ...p });
+  await rec.handle({ type: 'mouse', event: 'up', ...p });
+}
+
+async function type(rec: RecorderSession, text: string) {
+  for (const k of text) {
+    await rec.handle({ type: 'key', event: 'down', key: k });
+    await rec.handle({ type: 'key', event: 'up', key: k });
+  }
+}
+
+/** What a user does in the recorder: names each "?" element in click order. */
+function nameElements(steps: RecorderStep[], names: string[]): RecorderStep[] {
+  const queue = [...names];
+  return steps.map((s) => (s.text.includes('"?"') ? { ...s, text: s.text.replace('"?"', `"${queue.shift()}"`) } : s));
+}
+
 beforeAll(async () => {
-  process.env.AUT_USERNAME = 'admin';
   process.env.AUT_PASSWORD = 'admin';
   aut = createServer();
   await new Promise<void>((r) => aut.listen(0, r));
   autUrl = `http://127.0.0.1:${(aut.address() as AddressInfo).port}`;
-  app = await buildApp({ dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'izaro-')), classifier: new HeuristicClassifier(), webDist: '/nonexistent' });
+  await measure();
+  app = await buildApp({ dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'izaro-')), vision: jev, webDist: '/nonexistent' });
 });
 
 afterAll(async () => {
+  await setVariant('normal');
   await app?.close();
   aut?.close();
 });
 
-describe('record, baseline, rerun', () => {
-  it('detects a layout regression on rerun', async () => {
-    const project: Project = (
+describe('screen library and scenarios', () => {
+  let project: Project;
+  let signIn: Scenario;
+  let order: Scenario;
+
+  it('records sign-in as a scenario and builds the screen library', async () => {
+    project = (await app.inject({ method: 'POST', url: '/api/projects', payload: { name: 'Demo', baseUrl: autUrl, viewport } })).json();
+    const created = (await app.inject({ method: 'POST', url: `/api/projects/${project.id}/recordings`, payload: {} })).json();
+    const rec = app.izaro.recorders.get(created.id)!;
+
+    await click(rec, 'Username');
+    await type(rec, 'admin');
+    await click(rec, 'Password');
+    await rec.handle({ type: 'secret', name: 'AUT_PASSWORD' });
+    await click(rec, 'Sign in');
+
+    expect(rec.steps.map((s) => s.text)).toEqual([
+      'Expect the "Login" screen',
+      'Enter "admin" in "?"',
+      'Enter "{{secret:AUT_PASSWORD}}" in "?"',
+      'Click "?"',
+      'Expect the "Dashboard" screen',
+    ]);
+    expect(rec.steps[3].cropKey).toBeTruthy();
+
+    // Saving with unnamed elements is refused.
+    const refused = await app.inject({ method: 'POST', url: `/api/recordings/${created.id}/save`, payload: { name: 'Sign in' } });
+    expect(refused.statusCode).toBe(400);
+
+    const steps = nameElements(rec.steps, ['Username', 'Password', 'Sign in']);
+    signIn = (await app.inject({ method: 'POST', url: `/api/recordings/${created.id}/save`, payload: { name: 'Sign in', steps } })).json();
+    expect(signIn.steps[2].text).toBe('Enter "{{secret:AUT_PASSWORD}}" in "Password"');
+
+    const screens = (await app.inject({ method: 'GET', url: `/api/projects/${project.id}/screens` })).json();
+    expect(screens.map((s: { name: string }) => s.name)).toEqual(['Login', 'Dashboard']);
+    expect(screens[0].elements.map((e: { label: string }) => e.label)).toEqual(['Username', 'Password', 'Sign in']);
+    expect(screens[0].next).toHaveLength(1);
+  });
+
+  it('runs the setup scenario first when recording, and reruns visually', async () => {
+    project = (await app.inject({ method: 'PUT', url: `/api/projects/${project.id}`, payload: { setupScenarioId: signIn.id } })).json();
+    const created = (await app.inject({ method: 'POST', url: `/api/projects/${project.id}/recordings`, payload: {} })).json();
+    const rec = app.izaro.recorders.get(created.id)!;
+    expect(rec.steps.map((s) => s.text)).toEqual(['Run "Sign in"', 'Expect the "Dashboard" screen']);
+
+    await click(rec, 'Item');
+    await type(rec, 'Widget');
+    await click(rec, 'Place order');
+    await rec.handle({ type: 'expectText', text: 'Order placed: 1 x Widget' });
+    const steps = nameElements(rec.steps, ['Item', 'Place order']);
+    order = (await app.inject({ method: 'POST', url: `/api/recordings/${created.id}/save`, payload: { name: 'Place an order', steps } })).json();
+    expect(order.steps.map((s) => s.text)).toContain('Enter "Widget" in "Item"');
+
+    // Unchanged app: every element matches its library image, so jev-img is never asked where things are.
+    jev.texts.add('Order placed: 1 x Widget');
+    jev.finds.length = 0;
+    const same = await run(order);
+    expect(same.run.status, JSON.stringify(same.results, null, 1)).toBe('passed');
+    expect(jev.finds).toEqual([]);
+    expect(same.results.filter((r) => r.found).every((r) => r.found!.method === 'exact-match')).toBe(true);
+    expect(same.results[0].from).toBe('Sign in');
+  });
+
+  it('finds moved elements with jev-img and flags the changed screen', async () => {
+    await setVariant('broken');
+    const before = new Map(jev.controls);
+    try {
+      await measureBroken();
+      const r = await run(order);
+      const moved = r.results.find((x) => x.text === 'Click "Place order"')!;
+      expect(moved.found?.method).toBe('jev-img');
+      expect(moved.status).toBe('passed');
+      const expectScreen = r.results.find((x) => x.text === 'Expect the "Dashboard" screen' && !x.from)!;
+      expect(['failed', 'review']).toContain(expectScreen.status);
+      expect(expectScreen.diffImageKey).toBeTruthy();
+      expect(r.run.status).not.toBe('passed');
+    } finally {
+      jev.controls = before;
+      await setVariant('normal');
+    }
+  });
+
+  it('runs a scenario written in plain sentences', async () => {
+    const bad = await app.inject({
+      method: 'POST',
+      url: `/api/projects/${project.id}/scenarios`,
+      payload: { name: 'Bad', steps: [{ text: 'buy something nice' }] },
+    });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().problems[0]).toMatch(/^Step 1:/);
+
+    const written: Scenario = (
       await app.inject({
         method: 'POST',
-        url: '/api/projects',
+        url: `/api/projects/${project.id}/scenarios`,
         payload: {
-          name: 'Demo',
-          baseUrl: autUrl,
-          viewport: { width: 1000, height: 700 },
-          auth: {
-            loginUrl: '/login',
-            usernameSelector: '#username',
-            passwordSelector: '#password',
-            submitSelector: '[data-testid="login-submit"]',
-            username: '{{env:AUT_USERNAME}}',
-            password: '{{env:AUT_PASSWORD}}',
-            successSelector: '[data-testid="welcome"]',
-          },
+          name: 'Order a gadget',
+          steps: ['Enter "Gadget" in "Item"', 'Click "Place order"', 'Expect to see "Order placed: 1 x Gadget"', 'Expect to see "Order cancelled"'].map((text) => ({ text })),
         },
       })
     ).json();
-
-    // Drive the recorder the way the UI does: forwarded mouse and key events.
-    const created = (await app.inject({ method: 'POST', url: `/api/projects/${project.id}/recordings`, payload: { startUrl: '/dashboard' } })).json();
-    const rec = app.izaro.recorders.get(created.id)!;
-    const inspected: RecorderServerMessage[] = [];
-    rec.on('message', (m: RecorderServerMessage) => m.type === 'inspected' && inspected.push(m));
-    const page = (rec as unknown as { page: import('playwright').Page }).page;
-    const centre = async (sel: string) => {
-      const b = (await page.locator(sel).boundingBox())!;
-      return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
-    };
-    const click = async (sel: string) => {
-      const p = await centre(sel);
-      await rec.handle({ type: 'mouse', event: 'down', ...p });
-      await rec.handle({ type: 'mouse', event: 'up', ...p });
-    };
-    await click('#item');
-    for (const k of 'Widget') {
-      await rec.handle({ type: 'key', event: 'down', key: k });
-      await rec.handle({ type: 'key', event: 'up', key: k });
-    }
-    await click('#qty');
-    await rec.handle({ type: 'key', event: 'down', key: 'ArrowDown' });
-    await rec.handle({ type: 'key', event: 'up', key: 'ArrowDown' });
-    await rec.handle({ type: 'key', event: 'down', key: 'Enter' });
-    await rec.handle({ type: 'key', event: 'up', key: 'Enter' });
-    await click('button:has-text("Place order")');
-    await page.waitForSelector('[data-testid="status"]');
-    await rec.handle({ type: 'inspect', ...(await centre('[data-testid="status"]')) });
-    await expect.poll(() => inspected.length).toBe(1);
-    const el = inspected[0].type === 'inspected' ? inspected[0].element : null;
-    expect(el?.selectors[0]).toBe('[data-testid="status"]');
-    await rec.handle({ type: 'assert', selectors: el!.selectors, assertion: { kind: 'text', op: 'contains', expected: '2 x Widget' } });
-
-    const actions = rec.steps.map((s) => s.action).filter((a) => a !== 'press');
-    expect(actions).toEqual(['navigate', 'fill', 'select', 'click', 'assert']);
-    expect(rec.steps.find((s) => s.action === 'fill')?.value).toBe('Widget');
-
-    // Saving creates the test case and queues the baseline run.
-    const saved = (await app.inject({ method: 'POST', url: `/api/recordings/${created.id}/save`, payload: { name: 'Place order' } })).json();
-    const baseline = await waitForRun(saved.run.id);
-    expect(baseline.run.status, JSON.stringify(baseline.results)).toBe('passed');
-    expect(baseline.results.filter((r) => r.imageKey).length).toBeGreaterThanOrEqual(4);
-
-    // Unchanged app: every screenshot matches.
-    const same = (await app.inject({ method: 'POST', url: `/api/tests/${saved.test.id}/runs`, payload: {} })).json();
-    const sameResult = await waitForRun(same.id);
-    expect(sameResult.run.status, JSON.stringify(sameResult.results)).toBe('passed');
-    expect(sameResult.results.every((r) => !r.classification || r.classification.label === 'identical')).toBe(true);
-
-    // Broken layout: rerun is flagged.
-    await setVariant('broken');
-    const check = (await app.inject({ method: 'POST', url: `/api/tests/${saved.test.id}/runs`, payload: {} })).json();
-    const result = await waitForRun(check.id);
-    await setVariant('normal');
-    expect(['failed', 'review']).toContain(result.run.status);
-    const flagged = result.results.filter((r) => r.classification && r.classification.label !== 'identical');
-    expect(flagged.length).toBeGreaterThan(0);
-    expect(flagged[0].diffImageKey).toBeTruthy();
-
-    // Accepting a flagged step updates the baseline for that step.
-    const reviewed = (await app.inject({ method: 'POST', url: `/api/results/${flagged[0].id}/review`, payload: { decision: 'accepted' } })).json();
-    expect(reviewed.status).toBe('passed');
-
-    const spec = await app.inject({ method: 'GET', url: `/api/tests/${saved.test.id}/spec` });
-    expect(spec.body).toContain('process.env.AUT_PASSWORD!');
-    expect(spec.body).toContain('toContainText("2 x Widget")');
+    jev.texts.add('Order placed: 1 x Gadget');
+    const r = await run(written);
+    expect(r.results.slice(-4).map((x) => [x.text, x.status])).toEqual([
+      ['Enter "Gadget" in "Item"', 'passed'],
+      ['Click "Place order"', 'passed'],
+      ['Expect to see "Order placed: 1 x Gadget"', 'passed'],
+      ['Expect to see "Order cancelled"', 'failed'],
+    ]);
+    expect(r.results.slice(0, -4).every((x) => x.from === 'Sign in' && x.status === 'passed')).toBe(true);
+    expect(r.results[0].from).toBe('Sign in'); // project setup runs first
   });
 });
+
+async function measureBroken() {
+  const browser = await chromium.launch({ executablePath: config.chromiumPath });
+  const page: Page = await browser.newPage({ viewport });
+  await page.goto(`${autUrl}/login`);
+  await page.fill('#username', 'admin');
+  await page.fill('#password', 'admin');
+  await page.click('[data-testid="login-submit"]');
+  await page.waitForURL(/dashboard/);
+  for (const label of ['Item', 'Place order']) {
+    const b = (await page.locator(SELECTORS[label]).boundingBox())!;
+    jev.controls.set(label, { left: b.x / viewport.width, right: (b.x + b.width) / viewport.width, top: b.y / viewport.height, bottom: (b.y + b.height) / viewport.height });
+  }
+  await browser.close();
+}

@@ -3,26 +3,6 @@ import { Link } from 'react-router-dom';
 import type { Project } from '@izaro/shared';
 import { api } from '../api';
 
-const emptyAuth = {
-  loginUrl: '/login',
-  usernameSelector: '#username',
-  passwordSelector: '#password',
-  submitSelector: 'button[type=submit]',
-  username: '{{env:AUT_USERNAME}}',
-  password: '{{env:AUT_PASSWORD}}',
-  successSelector: '',
-};
-
-const authLabels: Record<keyof typeof emptyAuth, string> = {
-  loginUrl: 'Login URL',
-  usernameSelector: 'Username field selector',
-  passwordSelector: 'Password field selector',
-  submitSelector: 'Submit button selector',
-  username: 'Username',
-  password: 'Password',
-  successSelector: 'Logged-in check selector (optional)',
-};
-
 export function Projects() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState('');
@@ -30,8 +10,6 @@ export function Projects() {
   const [baseUrl, setBaseUrl] = useState('http://localhost:5050');
   const [width, setWidth] = useState(1280);
   const [height, setHeight] = useState(800);
-  const [useAuth, setUseAuth] = useState(true);
-  const [auth, setAuth] = useState(emptyAuth);
 
   const load = () => api<Project[]>('/projects').then(setProjects).catch((e) => setError(e.message));
   useEffect(() => {
@@ -42,15 +20,7 @@ export function Projects() {
     e.preventDefault();
     setError('');
     try {
-      await api('/projects', {
-        method: 'POST',
-        json: {
-          name,
-          baseUrl,
-          viewport: { width, height },
-          auth: useAuth ? { ...auth, successSelector: auth.successSelector || undefined } : undefined,
-        },
-      });
+      await api('/projects', { method: 'POST', json: { name, baseUrl, viewport: { width, height } } });
       setName('');
       load();
     } catch (err) {
@@ -79,7 +49,7 @@ export function Projects() {
             Name <input value={name} onChange={(e) => setName(e.target.value)} required />
           </label>
           <label>
-            Base URL <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} required />
+            Start address <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} required />
           </label>
           <div className="row">
             <label>
@@ -89,23 +59,9 @@ export function Projects() {
               Height <input type="number" value={height} onChange={(e) => setHeight(+e.target.value)} />
             </label>
           </div>
-          <label className="check">
-            <input type="checkbox" checked={useAuth} onChange={(e) => setUseAuth(e.target.checked)} /> App requires login
-          </label>
-          {useAuth && (
-            <fieldset>
-              <legend>Login</legend>
-              {(Object.keys(emptyAuth) as (keyof typeof emptyAuth)[]).map((k) => (
-                <label key={k}>
-                  {authLabels[k]}
-                  <input value={auth[k]} onChange={(e) => setAuth({ ...auth, [k]: e.target.value })} />
-                </label>
-              ))}
-              <p className="hint">
-                Use <code>{'{{env:NAME}}'}</code> so credentials stay in the server environment, not the database.
-              </p>
-            </fieldset>
-          )}
+          <p className="hint">
+            Sign-in is recorded like any other scenario, then chosen as the project's setup scenario so it runs before the others.
+          </p>
           {error && <p className="error">{error}</p>}
           <button type="submit">Create project</button>
         </form>

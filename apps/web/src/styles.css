@@ -60,7 +60,7 @@ button.link { background: none; border: none; color: var(--muted); padding: 0 4p
 .segmented button { border: none; border-radius: 0; background: transparent; color: var(--accent); }
 .segmented button.active { background: var(--accent); color: #fff; }
 .segmented.small button { padding: 3px 10px; font-size: 12px; }
-.recorder { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+.recorder { display: grid; grid-template-columns: minmax(0, 1fr) 440px; gap: 16px; align-items: start; }
 .toolbar { display: flex; gap: 12px; margin-bottom: 10px; }
 .urlbar { flex: 1; }
 .screen { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 6px; background: #fff; outline: none; cursor: default; }
@@ -95,3 +95,24 @@ figcaption { font-size: 12px; color: var(--muted); }
   .side-by-side { grid-template-columns: 1fr; }
   .content { padding: 16px; }
 }
+.inline { display: inline-flex; gap: 6px; align-items: center; margin: 8px 0; }
+.inline select { width: auto; }
+.tabs { margin: 12px 0 4px; }
+.screens { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin-top: 12px; }
+.screen-card { border: 1px solid var(--border); border-radius: 6px; padding: 10px; }
+.screen-card > img { width: 100%; border: 1px solid var(--border); display: block; }
+.screen-name { margin-top: 8px; font-weight: 600; }
+.elements { list-style: none; padding: 0; margin: 6px 0; display: grid; gap: 6px; }
+.elements li { display: grid; grid-template-columns: 90px 1fr; gap: 6px; align-items: center; }
+.elements img { max-width: 90px; max-height: 40px; border: 1px solid var(--border); }
+.steps.editable li { flex-wrap: nowrap; }
+.steps.editable input { flex: 1; font-family: ui-monospace, Menlo, monospace; font-size: 12px; padding: 4px 6px; }
+.steps .crop { max-width: 64px; max-height: 28px; border: 1px solid var(--border); }
+.steps li.needs-name input { border-color: var(--review); }
+.scenario-text { font-family: ui-monospace, Menlo, monospace; font-size: 13px; line-height: 1.6; margin: 8px 0; }
+.grid-2.wide-left { grid-template-columns: minmax(0, 3fr) minmax(300px, 2fr); }
+.table.compact td { padding: 4px 6px; font-size: 12px; }
+.region.found { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.thumb-wrap { display: inline-block; position: relative; }
+.thumb-wrap .thumb { max-width: 420px; }
+@media (max-width: 900px) { .grid-2.wide-left { grid-template-columns: 1fr; } }
