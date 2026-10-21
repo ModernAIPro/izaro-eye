@@ -101,3 +101,9 @@ The request shape was checked against the live API, including the danger-zone im
 - *Hosting:* Pradeep chose to keep both services on Vercel as a demo, accepting that data resets. Vercel containers have no persistent disk and can run several instances, so SQLite, images and videos are lost on restart, and recorder or live-run WebSockets need to reach the instance that holds the session. Deep links into the UI (`BrowserRouter`) need an SPA fallback to `index.html`, to verify on the first preview deploy.
 - *Node version:* Vercel rejected `engines.node: ">=26"` (it supports up to 24.x). The root and `apps/web` now say `24.x || >=26`, so Vercel builds the UI on Node 24. `apps/server` keeps `>=26`, and its container uses `node:26`.
 - *Build context:* Vercel builds a container from the folder its Dockerfile is in, so `apps/server/Dockerfile` couldn't see the root lockfile. The `server` service now uses the root `Dockerfile`, which also builds the UI. Vercel never routes UI paths to it, so that only costs a few seconds of build time.
+
+### 20. Server on Railway, UI on Vercel
+**Trigger:** on Vercel, new projects weren't saved, because the container's disk is wiped and each instance has its own copy. Pradeep chose to run the server on Railway with a volume, keep the UI on Vercel, and spend no money on Railway.
+**Done (part 1):** `railway.json` (root `Dockerfile`, 1 replica, health check `/api/health`). `VOLUME` was removed from the Dockerfile because Railway rejects it, and `docker run -v` still works without it. The UI now reads `VITE_WS_ORIGIN` for WebSockets, because Vercel's proxy only carries HTTP to an external server.
+**Free plan limits:** 0.5 GB RAM, a 0.5 GB volume and $1 of credit a month. The server has to sleep when idle (App Sleeping), or an always-on instance uses up the credit within days.
+**Next:** once the Railway URL exists, point Vercel's `/api` rewrite at it and drop the Vercel `server` service.
