@@ -23,15 +23,18 @@ record ──► test case ──► baseline run ──► screenshots (baselin
 
 ## Run locally
 
-Requires Node 22 and pnpm.
+Requires Node 26 (see `.nvmrc`) and pnpm 10 or newer. Node 26 no longer ships corepack, so install pnpm with npm.
 
 ```bash
+npm i -g pnpm
 pnpm install
 pnpm --filter @izaro/server exec playwright install chromium
 cp .env.example apps/server/.env   # then edit
 pnpm demo-aut                      # optional sample app on :5050 (admin/admin)
 pnpm dev                           # API on :4000, UI on :5173
 ```
+
+If the Chromium download cannot finish, install Google Chrome and set `BROWSER_CHANNEL=chrome` in `apps/server/.env` to use it instead.
 
 Open http://localhost:5173, create a project (for the demo: base URL `http://localhost:5050/dashboard`, submit selector `[data-testid="login-submit"]`), then **Record new test**.
 

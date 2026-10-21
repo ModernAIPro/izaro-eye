@@ -4,7 +4,7 @@ import { config } from './config.js';
 import { expand } from './template.js';
 
 export function launchBrowser(): Promise<Browser> {
-  return chromium.launch({ headless: config.headless, executablePath: config.chromiumPath });
+  return chromium.launch({ headless: config.headless, executablePath: config.chromiumPath, channel: config.browserChannel });
 }
 
 /**

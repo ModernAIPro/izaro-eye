@@ -7,6 +7,8 @@ export const config = {
   dataDir: path.resolve(process.env.DATA_DIR ?? './data'),
   headless: process.env.HEADLESS !== 'false',
   chromiumPath: process.env.CHROMIUM_PATH || undefined,
+  /** e.g. `chrome` to use the locally installed Google Chrome instead of Playwright's Chromium. */
+  browserChannel: process.env.BROWSER_CHANNEL || undefined,
   pixelIdenticalThreshold: num(process.env.PIXEL_IDENTICAL_THRESHOLD, 0.0005),
   typesafe: {
     apiKey: process.env.TYPESAFE_API_KEY || '',
