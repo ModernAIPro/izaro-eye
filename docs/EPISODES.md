@@ -96,7 +96,8 @@ The request shape was checked against the live API, including the danger-zone im
 **Ask:** "Configure this repository to deploy on Vercel as a project with multiple services", starting from an auto-detected `vercel.json`.
 **Done:**
 - `vercel.json` with two services. `web` (Vite, `apps/web`) is public on `/(.*)`, and `server` (container runtime, `apps/server/Dockerfile`) is public on `/api/(.*)`. The suggested root `app` container was dropped, because it duplicated the server and web and left `web` unused behind the catch-all.
-- `apps/server/Dockerfile`: a server-only image built from the repo root, with Chromium. The root `Dockerfile` is unchanged for self-hosting.
+- The server image comes from the root `Dockerfile` (see *Build context* below).
 - No bindings: the only caller is the browser, which uses relative `/api` URLs on the same domain, and the server never calls the web service. Vercel keeps the `/api` prefix when it forwards, which matches the server's routes, so no code change was needed.
 - *Hosting:* Pradeep chose to keep both services on Vercel as a demo, accepting that data resets. Vercel containers have no persistent disk and can run several instances, so SQLite, images and videos are lost on restart, and recorder or live-run WebSockets need to reach the instance that holds the session. Deep links into the UI (`BrowserRouter`) need an SPA fallback to `index.html`, to verify on the first preview deploy.
 - *Node version:* Vercel rejected `engines.node: ">=26"` (it supports up to 24.x). The root and `apps/web` now say `24.x || >=26`, so Vercel builds the UI on Node 24. `apps/server` keeps `>=26`, and its container uses `node:26`.
+- *Build context:* Vercel builds a container from the folder its Dockerfile is in, so `apps/server/Dockerfile` couldn't see the root lockfile. The `server` service now uses the root `Dockerfile`, which also builds the UI. Vercel never routes UI paths to it, so that only costs a few seconds of build time.

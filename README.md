@@ -60,7 +60,7 @@ To see a regression with the demo app, run `curl -X POST localhost:5050/__varian
 
 Docker: `docker build -t izaro-eye . && docker run -p 4000:4000 --env-file .env -v izaro-data:/data izaro-eye`.
 
-Vercel: `vercel.json` deploys two services in one project. `web` (Vite, `apps/web`) serves every path, and `server` (a container built from `apps/server/Dockerfile`) serves `/api/*`. The browser calls `/api` on the same domain, so neither service needs a binding. Vercel containers have no persistent disk, so the SQLite database, images and videos under `DATA_DIR` are lost when an instance is replaced. Test locally with `vercel dev`.
+Vercel: `vercel.json` deploys two services in one project. `web` (Vite, `apps/web`) serves every path, and `server` (a container built from the root `Dockerfile`) serves `/api/*`. The browser calls `/api` on the same domain, so neither service needs a binding. Vercel containers have no persistent disk, so the SQLite database, images and videos under `DATA_DIR` are lost when an instance is replaced. Test locally with `vercel dev`.
 
 ## jev-img configuration
 

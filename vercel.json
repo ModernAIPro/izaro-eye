@@ -4,7 +4,7 @@
     "server": {
       "root": ".",
       "runtime": "container",
-      "entrypoint": "apps/server/Dockerfile"
+      "entrypoint": "Dockerfile"
     },
     "web": {
       "root": "apps/web",
