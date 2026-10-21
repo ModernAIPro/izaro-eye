@@ -91,3 +91,11 @@ The request shape was checked against the live API, including the danger-zone im
 **Ask:** "disable ANTHROPIC_API_KEY - It is not mandatory feature. it is optional feature".
 **Done:** with no key, the Insights tab hides the AI summary section instead of showing "not configured". The server never loads the Anthropic SDK and answers 404 on the summary endpoint. `.env.example` has the key commented out, marked optional, and the README has a short "Optional: AI summary" section.
 
+
+### 19. Vercel multi-service config
+**Ask:** "Configure this repository to deploy on Vercel as a project with multiple services", starting from an auto-detected `vercel.json`.
+**Done:**
+- `vercel.json` with two services. `web` (Vite, `apps/web`) is public on `/(.*)`, and `server` (container runtime, `apps/server/Dockerfile`) is public on `/api/(.*)`. The suggested root `app` container was dropped, because it duplicated the server and web and left `web` unused behind the catch-all.
+- `apps/server/Dockerfile`: a server-only image built from the repo root, with Chromium. The root `Dockerfile` is unchanged for self-hosting.
+- No bindings: the only caller is the browser, which uses relative `/api` URLs on the same domain, and the server never calls the web service. Vercel keeps the `/api` prefix when it forwards, which matches the server's routes, so no code change was needed.
+- *Open:* Vercel containers have no persistent disk and can run several instances, so SQLite, images and videos are lost on restart, and recorder or live-run WebSockets need to reach the instance that holds the session. Deep links into the UI (`BrowserRouter`) need an SPA fallback to `index.html`, to verify on the first preview deploy.
