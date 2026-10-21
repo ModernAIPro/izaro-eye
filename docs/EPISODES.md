@@ -95,7 +95,7 @@ The request shape was checked against the live API, including the danger-zone im
 ### 19. Vercel multi-service config
 **Ask:** "Configure this repository to deploy on Vercel as a project with multiple services", starting from an auto-detected `vercel.json`.
 **Done:**
-- `vercel.json` with two services. `web` (Vite, `apps/web`) is public on `/(.*)`, and `server` (container runtime, `apps/server/Dockerfile`) is public on `/api/(.*)`. The suggested root `app` container was dropped, because it duplicated the server and web and left `web` unused behind the catch-all.
+- `vercel.json` with two services. `web` (Vite, `apps/web`) is public on `/(.*)`, and `server` (container runtime, root `Dockerfile`) is public on `/api/(.*)`. The suggested root `app` container was dropped, because it duplicated the server and web and left `web` unused behind the catch-all.
 - The server image comes from the root `Dockerfile` (see *Build context* below).
 - No bindings: the only caller is the browser, which uses relative `/api` URLs on the same domain, and the server never calls the web service. Vercel keeps the `/api` prefix when it forwards, which matches the server's routes, so no code change was needed.
 - *Hosting:* Pradeep chose to keep both services on Vercel as a demo, accepting that data resets. Vercel containers have no persistent disk and can run several instances, so SQLite, images and videos are lost on restart, and recorder or live-run WebSockets need to reach the instance that holds the session. Deep links into the UI (`BrowserRouter`) need an SPA fallback to `index.html`, to verify on the first preview deploy.
