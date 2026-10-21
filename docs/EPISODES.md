@@ -58,3 +58,10 @@ The request shape was checked against the live API, including the danger-zone im
 
 ### 14. Project memory (this document)
 **Ask:** consolidated context memory and episodic memory for the project. **Done:** `docs/CONTEXT.md` (standing context) and `docs/EPISODES.md` (this log), both kept in the repo.
+
+### 15. Project-level TypeSafe key and deleting projects
+**Ask:** "add a config to accept TypeSafe Key for project level and add functionality to delete project".
+**Done:** a **Settings** tab on the project page.
+- *TypeSafe API key:* each project can have its own key, used for every jev-img call of that project's runs and recordings. Without one, the server's `TYPESAFE_API_KEY` is used. The key is write-only. It is stored in a separate `project_secrets` table, never returned by the API (only its last 4 characters), and never logged. `PUT /api/projects/:id` now accepts only name, baseUrl, viewport and setupScenarioId.
+- *Delete project:* an in-page confirmation, with no browser dialog, that removes the project's scenarios, runs, step results, logs, videos, screen library and secrets in one transaction, and closes any open recording. Images are content-addressed and may be shared, so they stay on disk.
+

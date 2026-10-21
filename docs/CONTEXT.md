@@ -78,6 +78,7 @@ Key web files: `App.tsx` (workspace grid and splitters), `workspace/ProjectTree.
 
 - Node 26 (`.nvmrc`). pnpm 10 or newer, installed with `npm i -g pnpm` because Node 26 has no corepack.
 - `pnpm install`, `pnpm --filter @izaro/server exec playwright install chromium`, then `cp .env.example apps/server/.env` and `pnpm dev` (API on :4000, UI on :5173).
+- A project can have its own TypeSafe key (project page › Settings). It is write-only: stored server-side in `project_secrets`, never returned or logged. Without one, the server key is used.
 - `apps/server/.env` holds `TYPESAFE_API_KEY`, `AUT_PASSWORD` and the optional `TYPESAFE_API_URL`, `JEV_MODEL`, `BROWSER_CHANNEL`, `CHROMIUM_PATH` and `DATA_DIR`.
 - Tests: `pnpm test` (parser, pixel diff, Jev requests, and an end-to-end test on the demo app). There are 18 tests.
 

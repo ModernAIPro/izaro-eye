@@ -18,7 +18,7 @@ import {
 } from '@izaro/shared';
 import { crop } from './browser.js';
 import { config } from './config.js';
-import { defaultVision, type Vision } from './compare/jev.js';
+import { defaultVision, JevVision, type Vision } from './compare/jev.js';
 import { newId, now } from './ids.js';
 import { Library } from './library.js';
 import { RecorderRegistry } from './recorder/session.js';
@@ -39,6 +39,7 @@ declare module 'fastify' {
 }
 
 const badRequest = (message: string) => Object.assign(new Error(message), { statusCode: 400 });
+const TYPESAFE_KEY = 'typesafe_api_key';
 const notFound = (what: string) => Object.assign(new Error(`${what} not found`), { statusCode: 404 });
 
 /** Checks every step against the sentence patterns; returns problems by line. */
@@ -59,7 +60,16 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
   const vision = opts.vision ?? defaultVision();
   const library = new Library(store, images, vision);
   const videoDir = path.join(dataDir, 'videos');
-  const deps = { store, images, vision, library, videoDir };
+  // A project can bring its own TypeSafe key; otherwise everything uses the server's (TYPESAFE_API_KEY).
+  const projectClients = new Map<string, Vision>();
+  const projectVision = (p: Project): Vision | undefined => {
+    const key = store.getSecret(p.id, TYPESAFE_KEY);
+    if (!key) return undefined;
+    let v = projectClients.get(key);
+    if (!v) projectClients.set(key, (v = new JevVision({ ...config.typesafe, apiKey: key })));
+    return v;
+  };
+  const deps = { store, images, vision, library, videoDir, projectVision };
   const queue = new RunQueue(deps);
   const recorders = new RecorderRegistry(deps);
 
@@ -88,7 +98,12 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
   app.get('/api/health', async () => ({ ok: true, vision: vision.name }));
 
   // ---- Projects ----
-  app.get('/api/projects', async () => store.listProjects());
+  /** What the UI sees of a project: never the key itself, only whether one is set and its last 4 characters. */
+  const view = (p: Project): Project => {
+    const key = store.getSecret(p.id, TYPESAFE_KEY);
+    return key ? { ...p, typesafeKey: { last4: key.slice(-4) } } : p;
+  };
+  app.get('/api/projects', async () => store.listProjects().map(view));
   app.post<{ Body: Omit<Project, 'id' | 'createdAt'> }>('/api/projects', async (req, reply) => {
     const b = req.body;
     if (!b?.name || !b.baseUrl) throw badRequest('name and baseUrl are required');
@@ -101,16 +116,36 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
     };
     return reply.code(201).send(store.saveProject(project));
   });
-  app.get<{ Params: { id: string } }>('/api/projects/:id', async (req) => mustProject(req.params.id));
-  app.put<{ Params: { id: string }; Body: Partial<Record<keyof Project, unknown>> }>('/api/projects/:id', async (req) => {
+  app.get<{ Params: { id: string } }>('/api/projects/:id', async (req) => view(mustProject(req.params.id)));
+  app.put<{ Params: { id: string }; Body: { name?: string; baseUrl?: string; viewport?: Project['viewport']; setupScenarioId?: string | null } }>(
+    '/api/projects/:id',
+    async (req) => {
+      const p = mustProject(req.params.id);
+      const b = req.body ?? {};
+      const next: Project = { ...p };
+      if (b.name?.trim()) next.name = b.name.trim();
+      if (b.baseUrl?.trim()) next.baseUrl = b.baseUrl.trim();
+      if (b.viewport) next.viewport = b.viewport;
+      // null or '' clears it (JSON has no undefined).
+      if (b.setupScenarioId) next.setupScenarioId = mustScenario(b.setupScenarioId).id;
+      else if (b.setupScenarioId === null || b.setupScenarioId === '') delete next.setupScenarioId;
+      delete next.typesafeKey;
+      return view(store.saveProject(next));
+    },
+  );
+  // The key is write-only: it is stored server-side and never returned or logged.
+  app.put<{ Params: { id: string }; Body: { key?: string | null } }>('/api/projects/:id/typesafe-key', async (req) => {
     const p = mustProject(req.params.id);
-    const next = { ...p, ...req.body, id: p.id, createdAt: p.createdAt } as Project;
-    // null clears an optional field (JSON has no undefined).
-    if (req.body?.setupScenarioId === null || req.body?.setupScenarioId === '') delete next.setupScenarioId;
-    return store.saveProject(next);
+    const key = typeof req.body?.key === 'string' ? req.body.key.trim() : '';
+    if (key && (key.length < 8 || key.length > 512 || /\s/.test(key))) throw badRequest('That does not look like a TypeSafe API key');
+    store.setSecret(p.id, TYPESAFE_KEY, key || undefined);
+    return view(p);
   });
   app.delete<{ Params: { id: string } }>('/api/projects/:id', async (req, reply) => {
-    store.deleteProject(req.params.id);
+    const p = mustProject(req.params.id);
+    await recorders.closeProject(p.id);
+    const runIds = store.deleteProject(p.id);
+    await Promise.all(runIds.map((id) => fs.promises.rm(videoPath(videoDir, id), { force: true })));
     return reply.code(204).send();
   });
 

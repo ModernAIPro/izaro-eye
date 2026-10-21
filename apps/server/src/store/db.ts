@@ -21,6 +21,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS step_results (id TEXT PRIMARY KEY, run_id TEXT NOT NULL, idx INTEGER NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS run_logs (seq INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL, data TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS run_logs_run ON run_logs (run_id, seq);
+      CREATE TABLE IF NOT EXISTS project_secrets (project_id TEXT NOT NULL, name TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (project_id, name));
     `);
   }
 
@@ -42,8 +43,36 @@ export class Store {
     this.db.prepare('INSERT OR REPLACE INTO projects (id, data) VALUES (?, ?)').run(p.id, JSON.stringify(p));
     return p;
   }
-  deleteProject(id: string) {
-    this.db.prepare('DELETE FROM projects WHERE id = ?').run(id);
+  /** Deletes the project and everything in it; returns the deleted run ids (their videos live on disk). */
+  deleteProject(id: string): string[] {
+    const runIds = (
+      this.db.prepare('SELECT r.id FROM runs r JOIN scenarios s ON s.id = r.scenario_id WHERE s.project_id = ?').all(id) as { id: string }[]
+    ).map((r) => r.id);
+    this.db.exec('BEGIN');
+    try {
+      for (const runId of runIds) {
+        this.db.prepare('DELETE FROM step_results WHERE run_id = ?').run(runId);
+        this.db.prepare('DELETE FROM run_logs WHERE run_id = ?').run(runId);
+        this.db.prepare('DELETE FROM runs WHERE id = ?').run(runId);
+      }
+      for (const table of ['scenarios', 'screens', 'project_secrets']) this.db.prepare(`DELETE FROM ${table} WHERE project_id = ?`).run(id);
+      this.db.prepare('DELETE FROM projects WHERE id = ?').run(id);
+      this.db.exec('COMMIT');
+    } catch (e) {
+      this.db.exec('ROLLBACK');
+      throw e;
+    }
+    return runIds;
+  }
+
+  /** Per-project secrets (e.g. the TypeSafe API key). Kept out of the project document so they are never sent to the UI. */
+  getSecret(projectId: string, name: string): string | undefined {
+    const r = this.db.prepare('SELECT value FROM project_secrets WHERE project_id = ? AND name = ?').get(projectId, name) as { value: string } | undefined;
+    return r?.value;
+  }
+  setSecret(projectId: string, name: string, value: string | undefined) {
+    if (value) this.db.prepare('INSERT OR REPLACE INTO project_secrets (project_id, name, value) VALUES (?, ?, ?)').run(projectId, name, value);
+    else this.db.prepare('DELETE FROM project_secrets WHERE project_id = ? AND name = ?').run(projectId, name);
   }
 
   listScreens(projectId: string) {

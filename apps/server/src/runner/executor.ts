@@ -31,6 +31,8 @@ export interface ExecutorDeps {
   store: Store;
   images: ImageStore;
   vision: Vision;
+  /** The vision client for a project that has its own TypeSafe key; undefined means use `vision`. */
+  projectVision?: (project: Project) => Vision | undefined;
   library: Library;
   /** Where run videos are kept; no video is recorded when unset. */
   videoDir?: string;
@@ -258,10 +260,12 @@ export async function executeRun(deps: ExecutorDeps, scenario: Scenario, run: Ru
     store.appendLog(run.id, entry);
     runEvents.emit('log', run.id, entry);
   };
-  const runDeps: ExecutorDeps = { ...deps, vision: new LoggedVision(deps.vision, log) };
+  const projectVision = deps.projectVision?.(project) ?? deps.vision;
+  const vision = new LoggedVision(projectVision, log);
+  const runDeps: ExecutorDeps = { ...deps, vision, library: deps.library.withVision(vision) };
   run = { ...run, status: 'running' };
   update(run);
-  log({ level: 'info', message: `Running "${scenario.name}" on ${project.baseUrl} with ${deps.vision.name}` });
+  log({ level: 'info', message: `Running "${scenario.name}" on ${project.baseUrl} with ${projectVision.name}${projectVision !== deps.vision ? ' (project key)' : ''}` });
 
   const results: StepResult[] = [];
   const browser = await launchBrowser();

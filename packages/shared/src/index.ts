@@ -15,6 +15,8 @@ export interface Project {
   /** Scenario run before every other scenario, e.g. signing in. */
   setupScenarioId?: string;
   createdAt: string;
+  /** Set when the project has its own TypeSafe API key; only its last 4 characters ever leave the server. */
+  typesafeKey?: { last4: string };
 }
 
 /** Pixel rectangle on a screenshot. */

@@ -51,6 +51,7 @@ export function App() {
               <Route path="/projects/new" element={<NewProject />} />
               <Route path="/projects/:id" element={<ProjectDetail tab="scenarios" />} />
               <Route path="/projects/:id/screens" element={<ProjectDetail tab="screens" />} />
+              <Route path="/projects/:id/settings" element={<ProjectDetail tab="settings" />} />
               <Route path="/projects/:id/record" element={<Recorder />} />
               <Route path="/projects/:id/scenarios/new" element={<ScenarioEditor key="new" />} />
               <Route path="/scenarios/:id" element={<ScenarioEditorFor />} />

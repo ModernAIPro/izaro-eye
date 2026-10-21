@@ -267,7 +267,9 @@ export class RecorderRegistry {
   constructor(private deps: RecorderDeps) {}
 
   async create(project: Project, startUrl?: string, startAfterId?: string) {
-    const s = new RecorderSession(this.deps, project, startUrl, startAfterId);
+    const vision = this.deps.projectVision?.(project) ?? this.deps.vision;
+    const deps = vision === this.deps.vision ? this.deps : { ...this.deps, vision, library: this.deps.library.withVision(vision) };
+    const s = new RecorderSession(deps, project, startUrl, startAfterId);
     try {
       await s.start();
     } catch (e) {
@@ -284,6 +286,9 @@ export class RecorderRegistry {
     const s = this.sessions.get(id);
     this.sessions.delete(id);
     await s?.stop();
+  }
+  async closeProject(projectId: string) {
+    await Promise.all([...this.sessions.values()].filter((s) => s.project.id === projectId).map((s) => this.close(s.id)));
   }
   async closeAll() {
     await Promise.all([...this.sessions.keys()].map((id) => this.close(id)));

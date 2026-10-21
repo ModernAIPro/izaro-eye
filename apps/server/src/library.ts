@@ -38,6 +38,11 @@ export class Library {
     private vision: Vision,
   ) {}
 
+  /** The same library, asking a different vision client (e.g. one with the project's own TypeSafe key). */
+  withVision(vision: Vision): Library {
+    return vision === this.vision ? this : new Library(this.store, this.images, vision);
+  }
+
   /** Returns the library screen this screenshot shows, if any. */
   async identify(projectId: string, png: Buffer, url: string): Promise<Screen | undefined> {
     const screens = this.store.listScreens(projectId);
