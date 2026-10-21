@@ -1,4 +1,6 @@
 import { EventEmitter } from 'node:events';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import type { Page } from 'playwright';
 import {
   parseStep,
@@ -10,11 +12,13 @@ import {
   type Scenario,
   type ScenarioStep,
   type StepHint,
+  type LogEntry,
   type StepResult,
 } from '@izaro/shared';
 import { crop, launchBrowser, newContext, screenshot, settle } from '../browser.js';
 import { compareScreenshots } from '../compare/index.js';
 import type { Vision } from '../compare/jev.js';
+import { LoggedVision } from '../compare/logged.js';
 import { pixelDiff } from '../compare/pixel.js';
 import { verdictFor } from '../compare/policy.js';
 import { newId, now } from '../ids.js';
@@ -28,9 +32,17 @@ export interface ExecutorDeps {
   images: ImageStore;
   vision: Vision;
   library: Library;
+  /** Where run videos are kept; no video is recorded when unset. */
+  videoDir?: string;
 }
 
-/** Emits `update` with the run id whenever a run or one of its step results changes. */
+export const videoPath = (videoDir: string, runId: string) => path.join(videoDir, `${runId}.webm`);
+
+/**
+ * Emits `update` (runId) whenever a run or one of its step results changes,
+ * `log` (runId, LogEntry) for each log line and `frame` (runId, frame) for the
+ * live view.
+ */
 export const runEvents = new EventEmitter();
 
 /** jev-img presence at or above this acts normally; between UNSURE and SURE acts but flags review. */
@@ -240,22 +252,43 @@ export async function executeRun(deps: ExecutorDeps, scenario: Scenario, run: Ru
     store.saveRun(r);
     runEvents.emit('update', r.id);
   };
+  let currentStep: number | undefined;
+  const log = (e: Omit<LogEntry, 'at' | 'source'> & { source?: LogEntry['source'] }) => {
+    const entry: LogEntry = { at: now(), source: e.source ?? 'runner', level: e.level, message: e.message, data: e.data, step: e.step ?? currentStep };
+    store.appendLog(run.id, entry);
+    runEvents.emit('log', run.id, entry);
+  };
+  const runDeps: ExecutorDeps = { ...deps, vision: new LoggedVision(deps.vision, log) };
   run = { ...run, status: 'running' };
   update(run);
+  log({ level: 'info', message: `Running "${scenario.name}" on ${project.baseUrl} with ${deps.vision.name}` });
 
   const results: StepResult[] = [];
   const browser = await launchBrowser();
+  const videoTmp = deps.videoDir ? path.join(deps.videoDir, 'tmp', run.id) : undefined;
+  let page: Page | undefined;
   try {
-    const page = await (await newContext(browser, project)).newPage();
+    page = await newContext(browser, project, { videoDir: videoTmp })
+      .then((c) => c.newPage())
+      .catch(async (e) => {
+        // Video needs Playwright's ffmpeg (installed with `playwright install chromium`); run without it if missing.
+        log({ level: 'warn', message: `Video recording is not available: ${(e as Error).message.split('\n')[0]}` });
+        return (await newContext(browser, project)).newPage();
+      });
+    watchBrowser(page, log);
+    await streamFrames(page, run.id);
     await page.goto(project.baseUrl);
-    const exec = new Executor(deps, project, page);
+    const exec = new Executor(runDeps, project, page);
     let aborted = false;
     for (const [index, { step, from, error }] of flatten(store, project, scenario).entries()) {
+      currentStep = index;
       const result: StepResult = { id: newId('res'), runId: run.id, index, text: step.text, from, status: 'passed' };
       results.push(result);
       if (aborted) {
         result.status = 'skipped';
       } else {
+        const started = Date.now();
+        log({ level: 'info', message: `Step ${index + 1}: ${step.text}${from ? ` (from ${from})` : ''}` });
         try {
           if (error) throw new StepFailure(error);
           const parsed = parseStep(step.text);
@@ -272,18 +305,60 @@ export async function executeRun(deps: ExecutorDeps, scenario: Scenario, run: Ru
           const png = await screenshot(page).catch(() => undefined);
           if (png) result.imageKey = await images.put(png);
         }
+        const level = result.status === 'passed' ? 'info' : result.status === 'review' ? 'warn' : 'error';
+        log({ level, message: `Step ${index + 1} ${result.status} in ${Date.now() - started} ms${result.error ? `: ${result.error}` : ''}` });
       }
       store.saveResult(result);
       runEvents.emit('update', run.id);
     }
+    currentStep = undefined;
     run = { ...run, status: summarize(results), finishedAt: now() };
   } catch (e) {
     run = { ...run, status: 'error', error: (e as Error).message, finishedAt: now() };
   } finally {
+    const video = page?.video();
+    await page?.context().close().catch(() => {});
+    if (video && deps.videoDir) {
+      try {
+        await video.saveAs(videoPath(deps.videoDir, run.id));
+        run = { ...run, hasVideo: true };
+      } catch (e) {
+        log({ level: 'warn', message: `Video not saved: ${(e as Error).message}` });
+      }
+      if (videoTmp) await fs.rm(videoTmp, { recursive: true, force: true }).catch(() => {});
+    }
     await browser.close().catch(() => {});
   }
+  log({ level: run.status === 'passed' ? 'info' : 'warn', message: `Run ${run.status}` });
   update(run);
   return run;
+}
+
+/** Forwards the page's console, uncaught errors and failed requests to the run log. */
+function watchBrowser(page: Page, log: (e: Omit<LogEntry, 'at' | 'source'> & { source?: LogEntry['source'] }) => void) {
+  page.on('console', (m) => {
+    const t = m.type();
+    log({ source: 'browser', level: t === 'error' ? 'error' : t === 'warning' ? 'warn' : 'info', message: `console.${t}: ${m.text()}` });
+  });
+  page.on('pageerror', (e) => log({ source: 'browser', level: 'error', message: `Uncaught: ${e.message}` }));
+  page.on('requestfailed', (r) => log({ source: 'browser', level: 'warn', message: `${r.method()} ${r.url()} failed: ${r.failure()?.errorText ?? ''}` }));
+  page.on('response', (r) => {
+    if (r.status() >= 400) log({ source: 'browser', level: r.status() >= 500 ? 'error' : 'warn', message: `${r.status()} ${r.request().method()} ${r.url()}` });
+  });
+  page.on('framenavigated', (f) => {
+    if (f === page.mainFrame()) log({ source: 'browser', level: 'info', message: `Navigated to ${f.url()}` });
+  });
+}
+
+/** Live view: JPEG frames of the run's browser, only while someone is watching. */
+async function streamFrames(page: Page, runId: string) {
+  const cdp = await page.context().newCDPSession(page);
+  cdp.on('Page.screencastFrame', (f) => {
+    runEvents.emit('frame', runId, { data: f.data, width: f.metadata.deviceWidth, height: f.metadata.deviceHeight });
+    cdp.send('Page.screencastFrameAck', { sessionId: f.sessionId }).catch(() => {});
+  });
+  const vp = page.viewportSize();
+  await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 60, maxWidth: vp?.width, maxHeight: vp?.height }).catch(() => {});
 }
 
 /** Small in-process queue. Replace with BullMQ workers to scale out. */

@@ -6,10 +6,12 @@ import fastifyStatic from '@fastify/static';
 import {
   parseStep,
   UNLABELLED,
+  type LogEntry,
   type Project,
   type RecorderClientMessage,
   type RecorderServerMessage,
   type ReviewDecision,
+  type RunEvent,
   type Scenario,
   type ScenarioStep,
   type Screen,
@@ -20,7 +22,7 @@ import { defaultVision, type Vision } from './compare/jev.js';
 import { newId, now } from './ids.js';
 import { Library } from './library.js';
 import { RecorderRegistry } from './recorder/session.js';
-import { RunQueue, runEvents } from './runner/executor.js';
+import { RunQueue, runEvents, videoPath } from './runner/executor.js';
 import { Store } from './store/db.js';
 import { ImageStore } from './store/images.js';
 
@@ -56,7 +58,8 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
   const images = new ImageStore(path.join(dataDir, 'images'));
   const vision = opts.vision ?? defaultVision();
   const library = new Library(store, images, vision);
-  const deps = { store, images, vision, library };
+  const videoDir = path.join(dataDir, 'videos');
+  const deps = { store, images, vision, library, videoDir };
   const queue = new RunQueue(deps);
   const recorders = new RecorderRegistry(deps);
 
@@ -162,13 +165,30 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
   });
   app.get<{ Params: { id: string } }>('/api/runs/:id/events', { websocket: true }, (socket, req) => {
     const id = req.params.id;
-    const send = (runId: string) => {
-      if (runId !== id) return;
-      socket.send(JSON.stringify({ run: store.getRun(id), results: store.listResults(id) }));
+    const send = (e: RunEvent) => socket.send(JSON.stringify(e));
+    const onUpdate = (runId: string) => {
+      const run = store.getRun(id);
+      if (runId === id && run) send({ type: 'state', run, results: store.listResults(id) });
     };
-    runEvents.on('update', send);
-    socket.on('close', () => runEvents.off('update', send));
-    send(id);
+    const onLog = (runId: string, entry: LogEntry) => runId === id && send({ type: 'log', entry });
+    const onFrame = (runId: string, f: { data: string; width: number; height: number }) => runId === id && send({ type: 'frame', ...f });
+    runEvents.on('update', onUpdate);
+    runEvents.on('log', onLog);
+    runEvents.on('frame', onFrame);
+    socket.on('close', () => {
+      runEvents.off('update', onUpdate);
+      runEvents.off('log', onLog);
+      runEvents.off('frame', onFrame);
+    });
+    onUpdate(id);
+    send({ type: 'logs', entries: store.listLogs(id) });
+  });
+  app.get<{ Params: { id: string } }>('/api/runs/:id/logs', async (req) => store.listLogs(req.params.id));
+  app.get<{ Params: { id: string } }>('/api/runs/:id/video', async (req, reply) => {
+    if (!/^run_[0-9a-f]+$/.test(req.params.id)) throw notFound('Video');
+    const file = videoPath(videoDir, req.params.id);
+    if (!fs.existsSync(file)) throw notFound('Video');
+    return reply.header('content-type', 'video/webm').send(fs.createReadStream(file));
   });
 
   /**
@@ -195,7 +215,9 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
         }
       }
     }
-    return store.saveResult({ ...r, decision, status: decision === 'accepted' ? 'passed' : 'failed' });
+    const saved = store.saveResult({ ...r, decision, status: decision === 'accepted' ? 'passed' : 'failed' });
+    runEvents.emit('update', r.runId);
+    return saved;
   });
 
   app.get<{ Params: { '*': string } }>('/api/images/*', async (req, reply) => {

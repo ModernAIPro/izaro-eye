@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import type { Project, Run, Scenario, Screen, StepResult } from '@izaro/shared';
+import type { LogEntry, Project, Run, Scenario, Screen, StepResult } from '@izaro/shared';
 
 // SQLite keeps the MVP dependency-free. Each entity is stored as a JSON document
 // with the columns we filter on pulled out; moving to Postgres means
@@ -19,6 +19,8 @@ export class Store {
       CREATE TABLE IF NOT EXISTS scenarios (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, scenario_id TEXT NOT NULL, started_at TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS step_results (id TEXT PRIMARY KEY, run_id TEXT NOT NULL, idx INTEGER NOT NULL, data TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS run_logs (seq INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL, data TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS run_logs_run ON run_logs (run_id, seq);
     `);
   }
 
@@ -98,6 +100,13 @@ export class Store {
       .prepare('INSERT OR REPLACE INTO step_results (id, run_id, idx, data) VALUES (?, ?, ?, ?)')
       .run(r.id, r.runId, r.index, JSON.stringify(r));
     return r;
+  }
+
+  appendLog(runId: string, entry: LogEntry) {
+    this.db.prepare('INSERT INTO run_logs (run_id, data) VALUES (?, ?)').run(runId, JSON.stringify(entry));
+  }
+  listLogs(runId: string) {
+    return this.all<LogEntry>('SELECT data FROM run_logs WHERE run_id = ? ORDER BY seq', runId);
   }
 
   close() {

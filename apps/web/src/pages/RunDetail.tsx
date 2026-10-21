@@ -1,52 +1,112 @@
-import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import type { Rect, Run, Scenario, StepResult } from '@izaro/shared';
-import { api, imageUrl, wsUrl } from '../api';
+import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import type { Rect, Scenario, StepResult } from '@izaro/shared';
+import { api, imageUrl } from '../api';
 import { StatusBadge } from '../components/StatusBadge';
+import { useRunStream } from '../workspace/RunStream';
 
+type Media = 'live' | 'video' | 'screenshot';
 type View = 'side' | 'overlay' | 'diff';
 
+/** Centre pane for a run: the browser live (or its video afterwards), then the steps. */
 export function RunDetail() {
-  const { id } = useParams();
-  const [run, setRun] = useState<Run>();
-  const [results, setResults] = useState<StepResult[]>([]);
+  const { run, results } = useRunStream();
   const [scenario, setScenario] = useState<Scenario>();
+  const [selected, setSelected] = useState<string>();
+  const [media, setMedia] = useState<Media>('live');
+  const active = run && (run.status === 'running' || run.status === 'queued');
 
   useEffect(() => {
-    const sock = new WebSocket(wsUrl(`/runs/${id}/events`));
-    sock.onmessage = (e) => {
-      const data = JSON.parse(e.data) as { run: Run; results: StepResult[] };
-      setRun(data.run);
-      setResults(data.results);
-    };
-    return () => sock.close();
-  }, [id]);
-
-  useEffect(() => {
-    if (run && !scenario) api<Scenario>(`/scenarios/${run.scenarioId}`).then(setScenario);
+    if (run && scenario?.id !== run.scenarioId) api<Scenario>(`/scenarios/${run.scenarioId}`).then(setScenario);
   }, [run, scenario]);
+  useEffect(() => {
+    if (run && !active) setMedia(run.hasVideo ? 'video' : 'screenshot');
+    if (active) setMedia('live');
+  }, [run?.id, active, run?.hasVideo]);
 
   const review = async (r: StepResult, decision: 'accepted' | 'bug') => {
-    const updated = await api<StepResult>(`/results/${r.id}/review`, { method: 'POST', json: { decision } });
-    setResults((rs) => rs.map((x) => (x.id === updated.id ? updated : x)));
+    await api<StepResult>(`/results/${r.id}/review`, { method: 'POST', json: { decision } });
   };
 
-  if (!run) return <p>Loading…</p>;
+  if (!run) return <p className="muted">Loading…</p>;
+  const current = results.find((r) => r.id === selected);
+  const last = [...results].reverse().find((r) => r.imageKey);
+  const counts = results.reduce<Record<string, number>>((c, r) => ({ ...c, [r.status]: (c[r.status] ?? 0) + 1 }), {});
+
   return (
-    <section className="panel">
+    <div className="run-view">
       <div className="panel-head">
         <h2>
           {scenario?.name ?? 'Run'} <StatusBadge status={run.status} />
         </h2>
-        {scenario && <Link to={`/scenarios/${scenario.id}`}>← scenario</Link>}
+        <div className="row small muted">
+          {Object.entries(counts).map(([k, v]) => (
+            <span key={k}>
+              {v} {k}
+            </span>
+          ))}
+          {scenario && <Link to={`/scenarios/${scenario.id}`}>Edit scenario</Link>}
+        </div>
       </div>
       {run.error && <p className="error">{run.error}</p>}
-      <div className="results">
-        {results.map((r) => (
-          <ResultCard key={r.id} result={r} onReview={review} />
-        ))}
+
+      <div className="segmented small">
+        <button className={media === 'live' ? 'active' : ''} onClick={() => setMedia('live')} disabled={!active}>
+          Live
+        </button>
+        <button className={media === 'video' ? 'active' : ''} onClick={() => setMedia('video')} disabled={!run.hasVideo}>
+          Video
+        </button>
+        <button className={media === 'screenshot' ? 'active' : ''} onClick={() => setMedia('screenshot')} disabled={!last}>
+          Last screenshot
+        </button>
       </div>
-    </section>
+      <div className="stage">
+        {media === 'live' && <LiveView />}
+        {media === 'video' && run.hasVideo && <video key={run.id} src={`/api/runs/${run.id}/video`} controls autoPlay muted />}
+        {media === 'screenshot' && last?.imageKey && <img src={imageUrl(last.imageKey)} alt="last screenshot" />}
+        {media === 'live' && !active && <p className="muted stage-note">The run has finished. {run.hasVideo ? 'Watch the video.' : ''}</p>}
+      </div>
+
+      <h3>Steps</h3>
+      <ol className="step-list">
+        {results.map((r) => (
+          <li key={r.id} className={`step-row status-${r.status} ${r.id === selected ? 'selected' : ''}`} onClick={() => setSelected(r.id === selected ? undefined : r.id)}>
+            <StatusBadge status={r.status} />
+            <span className="step-text">{r.text}</span>
+            {r.from && <span className="muted small">from {r.from}</span>}
+          </li>
+        ))}
+        {results.length === 0 && <li className="muted">Starting…</li>}
+      </ol>
+      {current && <ResultCard result={current} onReview={review} />}
+    </div>
+  );
+}
+
+function LiveView() {
+  const { onFrame } = useRunStream();
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const [has, setHas] = useState(false);
+  useEffect(
+    () =>
+      onFrame((f) => {
+        const c = canvas.current;
+        if (!c) return;
+        if (c.width !== f.width) c.width = f.width;
+        if (c.height !== f.height) c.height = f.height;
+        const img = new Image();
+        img.onload = () => c.getContext('2d')?.drawImage(img, 0, 0);
+        img.src = `data:image/jpeg;base64,${f.data}`;
+        setHas(true);
+      }),
+    [onFrame],
+  );
+  return (
+    <>
+      <canvas ref={canvas} className={has ? '' : 'hidden'} />
+      {!has && <p className="muted stage-note">Waiting for the browser…</p>}
+    </>
   );
 }
 
@@ -71,7 +131,6 @@ function ResultCard({ result: r, onReview }: { result: StepResult; onReview: (r:
       <div className="result-head">
         <span>
           {r.index + 1}. {r.text}
-          {r.from && <span className="muted"> · from {r.from}</span>}
         </span>
         <StatusBadge status={r.status} />
       </div>

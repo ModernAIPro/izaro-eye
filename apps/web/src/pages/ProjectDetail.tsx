@@ -5,13 +5,12 @@ import { api, imageUrl } from '../api';
 
 type Tab = 'scenarios' | 'screens';
 
-export function ProjectDetail() {
+export function ProjectDetail({ tab }: { tab: Tab }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const [project, setProject] = useState<Project>();
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [screens, setScreens] = useState<Screen[]>([]);
-  const [tab, setTab] = useState<Tab>('scenarios');
   const [error, setError] = useState('');
 
   const load = () => {
@@ -65,10 +64,10 @@ export function ProjectDetail() {
       {error && <p className="error">{error}</p>}
 
       <div className="segmented tabs">
-        <button className={tab === 'scenarios' ? 'active' : ''} onClick={() => setTab('scenarios')}>
+        <button className={tab === 'scenarios' ? 'active' : ''} onClick={() => navigate(`/projects/${id}`)}>
           Scenarios ({scenarios.length})
         </button>
-        <button className={tab === 'screens' ? 'active' : ''} onClick={() => setTab('screens')}>
+        <button className={tab === 'screens' ? 'active' : ''} onClick={() => navigate(`/projects/${id}/screens`)}>
           Screen library ({screens.length})
         </button>
       </div>

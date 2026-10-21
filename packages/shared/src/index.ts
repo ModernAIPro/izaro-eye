@@ -77,7 +77,30 @@ export interface Run {
   startedAt: string;
   finishedAt?: string;
   error?: string;
+  /** A video of the run is available at /api/runs/:id/video. */
+  hasVideo?: boolean;
 }
+
+export type LogSource = 'typesafe' | 'browser' | 'runner';
+export type LogLevel = 'info' | 'warn' | 'error';
+
+export interface LogEntry {
+  at: string;
+  source: LogSource;
+  level: LogLevel;
+  message: string;
+  /** Extra detail, e.g. jev-img answers. */
+  data?: unknown;
+  /** Index of the step being executed, when known. */
+  step?: number;
+}
+
+/** Messages on the run WebSocket. */
+export type RunEvent =
+  | { type: 'state'; run: Run; results: StepResult[] }
+  | { type: 'frame'; data: string; width: number; height: number }
+  | { type: 'logs'; entries: LogEntry[] }
+  | { type: 'log'; entry: LogEntry };
 
 /** Labels jev-img can assign to an expected/actual screen pair. */
 export const JEV_LABELS = [

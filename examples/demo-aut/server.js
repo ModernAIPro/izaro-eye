@@ -38,7 +38,7 @@ const dashboard = (msg = '') =>
       <button type="submit">Place order</button>
     </form>
     ${msg ? `<p id="status" data-testid="status">${msg}</p>` : ''}
-  </div></main>`);
+  </div></main><script>console.log('Acme dashboard ready');</script>`);
 
 const readBody = (req) =>
   new Promise((resolve) => {

@@ -14,8 +14,9 @@ export function launchBrowser(): Promise<Browser> {
  * Recording and execution share these settings so screenshots are comparable:
  * fixed viewport, scale, locale and timezone, and no motion.
  */
-export function newContext(browser: Browser, project: Project): Promise<BrowserContext> {
+export function newContext(browser: Browser, project: Project, opts: { videoDir?: string } = {}): Promise<BrowserContext> {
   return browser.newContext({
+    recordVideo: opts.videoDir ? { dir: opts.videoDir, size: project.viewport } : undefined,
     viewport: project.viewport,
     deviceScaleFactor: 1,
     locale: 'en-US',

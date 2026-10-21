@@ -186,7 +186,7 @@ describe('screen library and scenarios', () => {
     jev.texts.add('Order placed: 1 x Widget');
     jev.finds.length = 0;
     const same = await run(order);
-    expect(same.run.status, JSON.stringify(same.results, null, 1)).toBe('passed');
+    expect(same.run.status, `${same.run.error} ${JSON.stringify(same.results, null, 1)}`).toBe("passed");
     expect(jev.finds).toEqual([]);
     expect(same.results.filter((r) => r.found).every((r) => r.found!.method === 'exact-match')).toBe(true);
     expect(same.results[0].from).toBe('Sign in');
@@ -205,6 +205,13 @@ describe('screen library and scenarios', () => {
       expect(['failed', 'review']).toContain(expectScreen.status);
       expect(expectScreen.diffImageKey).toBeTruthy();
       expect(r.run.status).not.toBe('passed');
+
+      // The run log has the jev-img question, the browser's navigation and the runner's steps.
+      const logs = (await app.inject({ method: 'GET', url: `/api/runs/${r.run.id}/logs` })).json() as { source: string; message: string }[];
+      expect(logs.some((l) => l.source === 'typesafe' && l.message.startsWith('find "Place order"'))).toBe(true);
+      expect(logs.some((l) => l.source === 'browser' && l.message.includes('/dashboard'))).toBe(true);
+      expect(logs.some((l) => l.source === 'runner' && l.message.startsWith('Step 1:'))).toBe(true);
+      if (r.run.hasVideo) expect((await app.inject({ method: 'GET', url: `/api/runs/${r.run.id}/video` })).statusCode).toBe(200);
     } finally {
       jev.controls = before;
       await setVariant('normal');

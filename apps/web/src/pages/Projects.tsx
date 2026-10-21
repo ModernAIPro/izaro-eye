@@ -1,47 +1,28 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { Project } from '@izaro/shared';
 import { api } from '../api';
 
-export function Projects() {
-  const [projects, setProjects] = useState<Project[]>([]);
+export function NewProject() {
+  const navigate = useNavigate();
   const [error, setError] = useState('');
   const [name, setName] = useState('');
   const [baseUrl, setBaseUrl] = useState('http://localhost:5050');
   const [width, setWidth] = useState(1280);
   const [height, setHeight] = useState(800);
 
-  const load = () => api<Project[]>('/projects').then(setProjects).catch((e) => setError(e.message));
-  useEffect(() => {
-    load();
-  }, []);
-
   const create = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
     try {
-      await api('/projects', { method: 'POST', json: { name, baseUrl, viewport: { width, height } } });
-      setName('');
-      load();
+      const p = await api<Project>('/projects', { method: 'POST', json: { name, baseUrl, viewport: { width, height } } });
+      navigate(`/projects/${p.id}`);
     } catch (err) {
       setError((err as Error).message);
     }
   };
 
   return (
-    <div className="grid-2">
-      <section className="panel">
-        <h2>Projects</h2>
-        {projects.length === 0 && <p className="muted">No projects yet. Create one to start recording.</p>}
-        <ul className="list">
-          {projects.map((p) => (
-            <li key={p.id}>
-              <Link to={`/projects/${p.id}`}>{p.name}</Link>
-              <span className="muted"> {p.baseUrl}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
       <section className="panel">
         <h2>New project</h2>
         <form onSubmit={create} className="form">
@@ -66,6 +47,5 @@ export function Projects() {
           <button type="submit">Create project</button>
         </form>
       </section>
-    </div>
   );
 }

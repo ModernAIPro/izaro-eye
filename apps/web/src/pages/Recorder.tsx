@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type WheelEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
 import { parseStep, UNLABELLED, type RecorderClientMessage, type RecorderServerMessage, type RecorderStep, type Viewport } from '@izaro/shared';
 import { api, imageUrl, wsUrl } from '../api';
+import { useSidePaneSlot } from '../workspace/RunStream';
 
 const BUTTONS = ['left', 'middle', 'right'] as const;
 
@@ -20,6 +22,7 @@ export function Recorder() {
   const [secret, setSecret] = useState('AUT_PASSWORD');
   const [error, setError] = useState('');
   const [starting, setStarting] = useState(true);
+  const slot = useSidePaneSlot();
 
   useEffect(() => {
     let closed = false;
@@ -149,7 +152,9 @@ export function Recorder() {
         )}
       </div>
 
-      <aside className="recorder-side">
+      {slot &&
+        createPortal(
+      <div className="recorder-side">
         <div className="panel">
           <h3>Scenario ({steps.length} steps)</h3>
           <p className="hint">
@@ -200,7 +205,9 @@ export function Recorder() {
             Save scenario
           </button>
         </div>
-      </aside>
+      </div>,
+          slot,
+        )}
     </div>
   );
 }
