@@ -14,15 +14,15 @@ export type Action =
   | { kind: 'wait'; seconds: number };
 
 export const STEP_PATTERNS: { pattern: string; example: string }[] = [
-  { pattern: 'Click "label"', example: 'Click "Shop individual and family plans"' },
-  { pattern: 'Enter "value" in "field"', example: 'Enter "94105" in "ZIP code"' },
-  { pattern: 'Choose "option" in "dropdown"', example: 'Choose "Family" in "Coverage"' },
+  { pattern: 'Click "label"', example: 'Click "Sign in"' },
+  { pattern: 'Enter "value" in "field"', example: 'Enter "jane@example.com" in "Email"' },
+  { pattern: 'Choose "option" in "dropdown"', example: 'Choose "Canada" in "Country"' },
   { pattern: 'Press "key"', example: 'Press "Enter"' },
   { pattern: 'Scroll down / Scroll up', example: 'Scroll down' },
-  { pattern: 'Go to "address"', example: 'Go to "/dashboard"' },
-  { pattern: 'Expect the "name" screen', example: 'Expect the "Plans" screen' },
-  { pattern: 'Expect to see "text"', example: 'Expect to see "Plans available in your area"' },
-  { pattern: 'Run "scenario"', example: 'Run "Sign in"' },
+  { pattern: 'Go to "address"', example: 'Go to "/settings"' },
+  { pattern: 'Expect the "name" screen', example: 'Expect the "Home" screen' },
+  { pattern: 'Expect to see "text"', example: 'Expect to see "Welcome back"' },
+  { pattern: 'Run "scenario"', example: 'Run "Log in"' },
   { pattern: 'Wait N seconds', example: 'Wait 2 seconds' },
 ];
 

@@ -1,5 +1,5 @@
 import { useCallback, useState, type CSSProperties } from 'react';
-import { Link, Navigate, Route, Routes, useMatch, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, Route, Routes, useMatch, useParams, useSearchParams } from 'react-router-dom';
 import { NewProject } from './pages/Projects';
 import { ProjectDetail } from './pages/ProjectDetail';
 import { Recorder } from './pages/Recorder';
@@ -10,6 +10,12 @@ import { LogsPane } from './workspace/LogsPane';
 import { ProjectTree } from './workspace/ProjectTree';
 import { RunStreamProvider, SidePaneContext } from './workspace/RunStream';
 import { Splitter, usePaneSize } from './workspace/Splitter';
+
+/** A fresh editor per scenario, so nothing typed for one scenario can be saved onto another. */
+function ScenarioEditorFor() {
+  const { id } = useParams();
+  return <ScenarioEditor key={id} />;
+}
 
 /** One page: projects and scenarios on the left, the work in the centre, logs on the right. */
 export function App() {
@@ -46,8 +52,8 @@ export function App() {
               <Route path="/projects/:id" element={<ProjectDetail tab="scenarios" />} />
               <Route path="/projects/:id/screens" element={<ProjectDetail tab="screens" />} />
               <Route path="/projects/:id/record" element={<Recorder />} />
-              <Route path="/projects/:id/scenarios/new" element={<ScenarioEditor />} />
-              <Route path="/scenarios/:id" element={<ScenarioEditor />} />
+              <Route path="/projects/:id/scenarios/new" element={<ScenarioEditor key="new" />} />
+              <Route path="/scenarios/:id" element={<ScenarioEditorFor />} />
               <Route path="/runs/:id" element={<RunRedirect />} />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>

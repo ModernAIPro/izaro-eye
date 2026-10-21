@@ -30,6 +30,10 @@ export function ProjectDetail({ tab }: { tab: Tab }) {
   };
 
   const setSetup = async (setupScenarioId: string) => {
+    // Changing it affects every run, so ask: a stray keystroke on the focused list would otherwise switch it silently.
+    const chosen = scenarios.find((s) => s.id === setupScenarioId);
+    const question = chosen ? `Run "${chosen.name}" before every other scenario?` : 'Stop running a setup scenario before the others?';
+    if (!confirm(question)) return;
     setProject(await api<Project>(`/projects/${id}`, { method: 'PUT', json: { setupScenarioId: setupScenarioId || undefined } }));
   };
 

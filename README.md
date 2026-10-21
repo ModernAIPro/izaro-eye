@@ -14,14 +14,14 @@ One sentence per step, following these patterns (quoted text is what you see on 
 
 | Pattern | Example |
 | --- | --- |
-| `Click "label"` | `Click "Shop individual and family plans"` |
-| `Enter "value" in "field"` | `Enter "94105" in "ZIP code"` |
-| `Choose "option" in "dropdown"` | `Choose "Family" in "Coverage"` |
+| `Click "label"` | `Click "Sign in"` |
+| `Enter "value" in "field"` | `Enter "jane@example.com" in "Email"` |
+| `Choose "option" in "dropdown"` | `Choose "Canada" in "Country"` |
 | `Press "key"` | `Press "Enter"` |
 | `Scroll down` / `Scroll up` | |
-| `Go to "address"` | `Go to "/dashboard"` |
-| `Expect the "name" screen` | `Expect the "Plans" screen` |
-| `Expect to see "text"` | `Expect to see "Plans available in your area"` |
+| `Go to "address"` | `Go to "/settings"` |
+| `Expect the "name" screen` | `Expect the "Home" screen` |
+| `Expect to see "text"` | `Expect to see "Welcome back"` |
 | `Run "scenario"` | `Run "Sign in"` |
 | `Wait N seconds` | `Wait 2 seconds` |
 

@@ -20,6 +20,6 @@ describe('scenario sentences', () => {
   it('rejects free-form sentences with a hint', () => {
     const r = parseStep('buy the cheapest family plan');
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toMatch(/Click "Shop individual/);
+    if (!r.ok) expect(r.error).toMatch(/Click "Sign in"/);
   });
 });

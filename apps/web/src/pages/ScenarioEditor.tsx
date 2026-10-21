@@ -128,7 +128,7 @@ export function ScenarioEditor() {
           className="scenario-text"
           value={text}
           spellCheck={false}
-          placeholder={'Run "Sign in"\nClick "Shop individual and family plans"\nExpect the "Plans" screen'}
+          placeholder={'Run "Log in"\nClick "Settings"\nExpect the "Settings" screen'}
           onChange={(e) => {
             setText(e.target.value);
             setSaved(false);
