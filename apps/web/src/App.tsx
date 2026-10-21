@@ -4,6 +4,7 @@ import { NewProject } from './pages/Projects';
 import { ProjectDetail } from './pages/ProjectDetail';
 import { Recorder } from './pages/Recorder';
 import { ScenarioEditor } from './pages/ScenarioEditor';
+import { StepEditor } from './pages/StepEditor';
 import { RunRedirect } from './pages/RunDetail';
 import { Home } from './pages/Home';
 import { LogsPane } from './workspace/LogsPane';
@@ -15,6 +16,11 @@ import { Splitter, usePaneSize } from './workspace/Splitter';
 function ScenarioEditorFor() {
   const { id } = useParams();
   return <ScenarioEditor key={id} />;
+}
+
+function StepEditorFor() {
+  const { id } = useParams();
+  return <StepEditor key={id} />;
 }
 
 /** One page: projects and scenarios on the left, the work in the centre, logs on the right. */
@@ -51,6 +57,9 @@ export function App() {
               <Route path="/projects/new" element={<NewProject />} />
               <Route path="/projects/:id" element={<ProjectDetail tab="scenarios" />} />
               <Route path="/projects/:id/screens" element={<ProjectDetail tab="screens" />} />
+              <Route path="/projects/:id/steps" element={<ProjectDetail tab="steps" />} />
+              <Route path="/projects/:id/steps/new" element={<StepEditor key="new" />} />
+              <Route path="/steps/:id" element={<StepEditorFor />} />
               <Route path="/projects/:id/settings" element={<ProjectDetail tab="settings" />} />
               <Route path="/projects/:id/record" element={<Recorder />} />
               <Route path="/projects/:id/scenarios/new" element={<ScenarioEditor key="new" />} />

@@ -43,6 +43,17 @@ One sentence per step. The parser is `packages/shared/src/scenario.ts` (`parseSt
 
 Secrets are written as `{{secret:NAME}}` and read from the server's environment, for example `AUT_PASSWORD`. They are never stored. A recorded element nobody has named yet shows as `"?"`.
 
+### Step library
+
+Each project has a **step library**: reusable steps in the project's own words, made of base steps (`packages/shared/src/steps.ts`, table `steps`, API `/api/projects/:id/steps` and `/api/steps/:id`).
+
+- A library step has a **sentence** with `{values}`, e.g. `Search for "{term}"`, a **kind** (action, flow or check), an **intent** in business words, optional **starts on / ends on** screens, **tags** and a **body** of steps that use the same `{values}`. Body lines keep their recorded element links, so runs still use the exact-image match.
+- A scenario line that is not a base step is matched against the library (`matchLibraryStep`; quoted values, smart quotes and spacing are tolerated, the most specific sentence wins). **Base steps always win**, so a sentence that would read as a base step is refused.
+- `flatten` expands library steps like `Run`, with the values filled in, up to the same depth of 5. In a run they fold under the scenario line, e.g. `Order "Gadget"`, tagged "library step".
+- Safeguards: sentences are unique per project; a body can only use `{values}` from its sentence; scenarios must pass real values (no `{x}` left); a step can't use itself, even through another step; a step in use can't be deleted (the API answers 409 with who uses it). Changing a sentence rewrites every scenario and step that uses it, as long as its `{values}` stay the same and in the same order.
+- In the UI: the **Step library** tab and tree item, the step editor (`/steps/:id`), **Make reusable step** in the scenario editor (selected lines, or all of them), suggestions under the editor as you type, and the library listed under Step patterns.
+- Later phases (see the design doc *Step library: design proposal*): suggestions mined from recordings, start/end screen checks, health and impact, coverage, and exporting the library as an agent skill.
+
 ## How it works
 
 - **Recorder** (`apps/server/src/recorder/session.ts`). It runs Chromium and streams it over a CDP screencast, and the UI sends mouse and keyboard input back. On each click it crops the control's image, which jev-img bounds using a screenshot marked with a crosshair, and adds `Click "?"`. Typing turns that step into `Enter`. Each time the screen settles, it is matched against the library: same address with pixel difference ≤3%, a different address ≤0.2%, otherwise Jev's "same screen?" check at ≥0.8 on up to 3 candidates. New screens are added with an `Expect the "…" screen` step.
@@ -72,7 +83,7 @@ packages/shared    Types, the scenario sentence parser, recorder and run WebSock
 examples/demo-aut  Small login + order app on :5050 (variant "broken" for regressions)
 ```
 
-Key web files: `App.tsx` (workspace grid and splitters), `workspace/ProjectTree.tsx`, `workspace/LogsPane.tsx`, `workspace/RunStream.tsx` (one WebSocket per open run), `workspace/Splitter.tsx` (`usePaneSize`, `Splitter`), `pages/ScenarioEditor.tsx` (editor and run on one page, `?run=`), `pages/RunDetail.tsx` (stage, steps with setup grouping), `pages/Recorder.tsx`, `pages/ProjectDetail.tsx`.
+Key web files: `App.tsx` (workspace grid and splitters), `workspace/ProjectTree.tsx`, `workspace/LogsPane.tsx`, `workspace/RunStream.tsx` (one WebSocket per open run), `workspace/Splitter.tsx` (`usePaneSize`, `Splitter`), `pages/ScenarioEditor.tsx` (editor and run on one page, `?run=`), `pages/RunDetail.tsx` (stage, steps with setup grouping), `pages/Recorder.tsx`, `pages/ProjectDetail.tsx`, `pages/StepEditor.tsx` (step editor and the Step library tab).
 
 ## Environment and running
 
@@ -80,7 +91,7 @@ Key web files: `App.tsx` (workspace grid and splitters), `workspace/ProjectTree.
 - `pnpm install`, `pnpm --filter @izaro/server exec playwright install chromium`, then `cp .env.example apps/server/.env` and `pnpm dev` (API on :4000, UI on :5173).
 - A project can have its own TypeSafe key (project page › Settings). It is write-only: stored server-side in `project_secrets`, never returned or logged. Without one, the server key is used.
 - `apps/server/.env` holds `TYPESAFE_API_KEY`, `AUT_PASSWORD` and the optional `TYPESAFE_API_URL`, `JEV_MODEL`, `BROWSER_CHANNEL`, `CHROMIUM_PATH` and `DATA_DIR`.
-- Tests: `pnpm test` (parser, pixel diff, Jev requests, and an end-to-end test on the demo app). There are 18 tests.
+- Tests: `pnpm test` (parser, step library, pixel diff, Jev requests, project settings, and end-to-end tests on the demo app). There are 24 tests.
 
 ## Working agreements
 

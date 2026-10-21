@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Link, useMatch, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { parseStep, STEP_PATTERNS, type Run, type Scenario, type ScenarioStep } from '@izaro/shared';
+import { matchLibraryStep, parseStep, STEP_PATTERNS, stepParams, type LibraryStepView, type Run, type Scenario, type ScenarioStep } from '@izaro/shared';
 import { api } from '../api';
 import { useRunStream } from '../workspace/RunStream';
 import { Splitter, usePaneSize } from '../workspace/Splitter';
 import { RunDetail, useSetupName } from './RunDetail';
+import type { NewStepState } from './StepEditor';
 
 /**
  * Write a scenario and run it on the same page: the sentences on the left, the run (live browser,
@@ -41,6 +42,13 @@ export function ScenarioEditor() {
     }
   };
   const edit = useRef<HTMLElement>(null);
+  const textarea = useRef<HTMLTextAreaElement>(null);
+  const [library, setLibrary] = useState<LibraryStepView[]>([]);
+  const [caret, setCaret] = useState({ start: 0, end: 0 });
+  const projectId = scenario?.projectId ?? (isNew ? projectParam : undefined);
+  useEffect(() => {
+    if (projectId) api<LibraryStepView[]>(`/projects/${projectId}/steps`).then(setLibrary);
+  }, [projectId]);
 
   useEffect(() => {
     setRuns([]);
@@ -71,7 +79,54 @@ export function ScenarioEditor() {
   }, [id, isNew, runId, stream.run?.status]);
 
   const lines = useMemo(() => text.split('\n').filter((l) => l.trim()), [text]);
-  const problems = lines.map((l, i) => ({ i, r: parseStep(l) })).filter((x) => !x.r.ok);
+  // A line is fine if it is a base step or one of the project's library steps.
+  const problems = lines
+    .map((l, i) => {
+      const param = stepParams(l)[0];
+      if (param) return { i, error: `replace {${param}} with a value` };
+      const r = parseStep(l);
+      return { i, error: r.ok || matchLibraryStep(l, library) ? undefined : r.error };
+    })
+    .filter((x) => x.error);
+
+  /** The line the caret is on, and library steps that start the way it does. */
+  const lineStart = text.lastIndexOf('\n', caret.start - 1) + 1;
+  const lineEnd = text.indexOf('\n', caret.start) === -1 ? text.length : text.indexOf('\n', caret.start);
+  const currentLine = text.slice(lineStart, lineEnd).trim();
+  const typed = currentLine.split(/["“”]/)[0].trim().toLowerCase();
+  const suggestions =
+    typed.length >= 2 && !parseStep(currentLine).ok && !matchLibraryStep(currentLine, library)
+      ? library.filter((st) => st.pattern.toLowerCase().startsWith(typed) || st.intent.toLowerCase().includes(typed)).slice(0, 5)
+      : [];
+  const trackCaret = (el: HTMLTextAreaElement) => setCaret({ start: el.selectionStart, end: el.selectionEnd });
+  const edited = (next: string) => {
+    setText(next);
+    setSaved(false);
+  };
+  /** Puts a library step's sentence on the caret's line (replacing what was typed there) and selects its first {value} to type over. */
+  const insertStep = (pattern: string) => {
+    const append = !currentLine && caret.start === text.length && !!text && !text.endsWith('\n');
+    const at = append ? text.length + 1 : lineStart;
+    edited(append ? `${text}\n${pattern}` : text.slice(0, lineStart) + pattern + text.slice(lineEnd));
+    const m = /\{[^}]+\}/.exec(pattern);
+    const [from, to] = m ? [at + m.index, at + m.index + m[0].length] : [at + pattern.length, at + pattern.length];
+    requestAnimationFrame(() => {
+      textarea.current?.focus();
+      textarea.current?.setSelectionRange(from, to);
+      if (textarea.current) trackCaret(textarea.current);
+    });
+  };
+  /** Opens a new library step made of the selected lines (or all of them), keeping their element images. */
+  const makeReusable = () => {
+    const all = toSteps();
+    // The textarea keeps its selection after the button takes focus.
+    const sel = textarea.current ? { start: textarea.current.selectionStart, end: textarea.current.selectionEnd } : caret;
+    const picked = sel.end > sel.start ? text.slice(0, sel.end).split('\n').filter((l) => l.trim()).length : 0;
+    const first = sel.end > sel.start ? text.slice(0, sel.start).split('\n').slice(0, -1).filter((l) => l.trim()).length : 0;
+    const body = picked ? all.slice(first, picked) : all;
+    const state: NewStepState = { body, fromScenario: scenario && { id: scenario.id, name: scenario.name } };
+    navigate(`/projects/${projectId}/steps/new`, { state });
+  };
 
   /** Keeps the library link of recorded steps whose text is unchanged. */
   const toSteps = (): ScenarioStep[] => {
@@ -126,18 +181,32 @@ export function ScenarioEditor() {
           {scenario && <Link to={`/projects/${scenario.projectId}`}>← project</Link>}
         </div>
         <textarea
+          ref={textarea}
           className="scenario-text"
           value={text}
           spellCheck={false}
           placeholder={'Run "Log in"\nClick "Settings"\nExpect the "Settings" screen'}
           onChange={(e) => {
-            setText(e.target.value);
-            setSaved(false);
+            edited(e.target.value);
+            trackCaret(e.currentTarget);
           }}
+          onSelect={(e) => trackCaret(e.currentTarget)}
+          onKeyUp={(e) => trackCaret(e.currentTarget)}
+          onMouseUp={(e) => trackCaret(e.currentTarget)}
         />
-        {problems.map(({ i, r }) => (
+        {suggestions.length > 0 && (
+          <div className="suggestions">
+            <span className="muted small">Library steps:</span>
+            {suggestions.map((st) => (
+              <button key={st.id} className="chip" title={st.intent} onMouseDown={(e) => e.preventDefault()} onClick={() => insertStep(st.pattern)}>
+                {st.pattern}
+              </button>
+            ))}
+          </div>
+        )}
+        {problems.map(({ i, error }) => (
           <p key={i} className="error">
-            Line {i + 1}: {!r.ok && r.error}
+            Line {i + 1}: {error}
           </p>
         ))}
         {error && <pre className="error">{error}</pre>}
@@ -149,6 +218,14 @@ export function ScenarioEditor() {
             Save
           </button>
           {!saved && <span className="muted small">Unsaved changes</span>}
+          <button
+            className="link small push-right"
+            onClick={makeReusable}
+            disabled={!projectId || lines.length === 0}
+            title="Turn the selected lines (or all of them) into a step in the project's step library"
+          >
+            Make reusable step
+          </button>
         </div>
         {setupName && scenario && (
           <p className="setup-hint small">
@@ -185,6 +262,30 @@ export function ScenarioEditor() {
                   ))}
                 </tbody>
               </table>
+              <h4>
+                Step library{' '}
+                {projectId && (
+                  <Link className="small" to={`/projects/${projectId}/steps`}>
+                    open
+                  </Link>
+                )}
+              </h4>
+              {library.length === 0 ? (
+                <p className="hint">This project has no library steps yet. Select lines above and choose Make reusable step.</p>
+              ) : (
+                <table className="table compact">
+                  <tbody>
+                    {library.map((st) => (
+                      <tr key={st.id} className="clickable" title="Insert at the cursor" onMouseDown={(e) => e.preventDefault()} onClick={() => insertStep(st.pattern)}>
+                        <td>
+                          <code>{st.pattern}</code>
+                        </td>
+                        <td className="muted">{st.intent}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
               <p className="hint">
                 Labels in quotes are what you see on screen; they are matched to the screen library and found with jev-img. Secrets: <code>{'"{{secret:NAME}}"'}</code>.
               </p>

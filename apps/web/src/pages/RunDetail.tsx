@@ -19,6 +19,7 @@ export function RunDetail({ embedded = false, picker }: { embedded?: boolean; pi
   const { run, results } = useRunStream();
   const [scenario, setScenario] = useState<Scenario>();
   const setupName = useSetupName(scenario);
+  const [scenarioNames, setScenarioNames] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<string>();
   const [media, setMedia] = useState<Media>('live');
   const split = useRef<HTMLDivElement>(null);
@@ -32,6 +33,9 @@ export function RunDetail({ embedded = false, picker }: { embedded?: boolean; pi
   useEffect(() => {
     if (run && scenario?.id !== run.scenarioId) api<Scenario>(`/scenarios/${run.scenarioId}`).then(setScenario);
   }, [run, scenario]);
+  useEffect(() => {
+    if (scenario) api<Scenario[]>(`/projects/${scenario.projectId}/scenarios`).then((ss) => setScenarioNames(new Set(ss.map((x) => x.name.trim().toLowerCase()))));
+  }, [scenario?.projectId]);
   useEffect(() => {
     if (run && !active) setMedia(run.hasVideo ? 'video' : 'screenshot');
     if (active) setMedia('live');
@@ -126,7 +130,17 @@ export function RunDetail({ embedded = false, picker }: { embedded?: boolean; pi
               g.from ? (
                 <StepGroup
                   key={g.items[0].id}
-                  title={g.from === setupName && g.items[0] === results[0] ? `Setup scenario: ${g.from}` : `Run "${g.from}"`}
+                  title={
+                    g.from === setupName && g.items[0] === results[0] ? (
+                      `Setup scenario: ${g.from}`
+                    ) : scenarioNames.has(g.from.trim().toLowerCase()) ? (
+                      `Run "${g.from}"`
+                    ) : (
+                      <>
+                        {g.from} <span className="tag">library step</span>
+                      </>
+                    )
+                  }
                   items={g.items}
                   selected={selected}
                   onSelect={setSelected}
@@ -158,7 +172,7 @@ export function useSetupName(scenario?: Scenario): string | undefined {
   return name;
 }
 
-/** Consecutive steps that came from the same reused scenario, so they can be folded under one header. */
+/** Consecutive steps that came from the same reused scenario or library step, so they can be folded under one header. */
 function groupSteps(results: StepResult[]) {
   const groups: { from?: string; items: StepResult[] }[] = [];
   for (const r of results) {
@@ -187,8 +201,8 @@ function StepRow({ r, selected, onSelect, nested }: RowProps & { r: StepResult; 
   );
 }
 
-/** A folded block of steps from another scenario; opens by itself when something in it needs attention. */
-function StepGroup({ title, items, selected, onSelect }: RowProps & { title: string; items: StepResult[] }) {
+/** A folded block of steps from another scenario or a library step; opens by itself when something in it needs attention. */
+function StepGroup({ title, items, selected, onSelect }: RowProps & { title: ReactNode; items: StepResult[] }) {
   const bad = items.some((r) => r.status === 'failed' || r.status === 'error');
   const [open, setOpen] = useState(bad);
   useEffect(() => {

@@ -4,8 +4,15 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import websocket from '@fastify/websocket';
 import fastifyStatic from '@fastify/static';
 import {
+  matchLibraryStep,
   parseStep,
+  patternProblems,
+  renameStepUse,
+  stepParams,
   UNLABELLED,
+  type LibraryStep,
+  type LibraryStepKind,
+  type LibraryStepView,
   type LogEntry,
   type Project,
   type RecorderClientMessage,
@@ -42,16 +49,22 @@ const badRequest = (message: string) => Object.assign(new Error(message), { stat
 const TYPESAFE_KEY = 'typesafe_api_key';
 const notFound = (what: string) => Object.assign(new Error(`${what} not found`), { statusCode: 404 });
 
-/** Checks every step against the sentence patterns; returns problems by line. */
-function validateSteps(steps: ScenarioStep[]): string[] {
+/** Checks every step against the sentence patterns and the project's step library; returns problems by line. */
+function validateSteps(steps: ScenarioStep[], library: LibraryStep[] = [], allowParams = false): string[] {
   const problems: string[] = [];
   steps.forEach((s, i) => {
+    // `{name}` belongs in a library step's body; a scenario passes real values.
+    const param = !allowParams && stepParams(s.text)[0];
+    if (param) return problems.push(`Step ${i + 1}: replace {${param}} with a value`);
     const p = parseStep(s.text);
-    if (!p.ok) problems.push(`Step ${i + 1}: ${p.error}`);
-    else if ('target' in p.action && p.action.target === UNLABELLED) problems.push(`Step ${i + 1}: name the element (replace "${UNLABELLED}")`);
+    if (!p.ok) {
+      if (!matchLibraryStep(s.text, library)) problems.push(`Step ${i + 1}: ${p.error}`);
+    } else if ('target' in p.action && p.action.target === UNLABELLED) problems.push(`Step ${i + 1}: name the element (replace "${UNLABELLED}")`);
   });
   return problems;
 }
+
+const STEP_KINDS: LibraryStepKind[] = ['action', 'flow', 'check'];
 
 export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> {
   const dataDir = opts.dataDir ?? config.dataDir;
@@ -174,7 +187,7 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
     mustProject(req.params.id);
     const { name, steps } = req.body ?? {};
     if (!name?.trim()) throw badRequest('name is required');
-    const problems = validateSteps(steps ?? []);
+    const problems = validateSteps(steps ?? [], store.listSteps(req.params.id));
     if (problems.length) return reply.code(400).send({ message: problems.join('\n'), problems });
     const s: Scenario = { id: newId('scn'), projectId: req.params.id, name: name.trim(), steps, createdAt: now(), updatedAt: now() };
     return reply.code(201).send(store.saveScenario(s));
@@ -183,13 +196,113 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
   app.put<{ Params: { id: string }; Body: { name?: string; steps?: ScenarioStep[] } }>('/api/scenarios/:id', async (req, reply) => {
     const s = mustScenario(req.params.id);
     const steps = req.body.steps ?? s.steps;
-    const problems = validateSteps(steps);
+    const problems = validateSteps(steps, store.listSteps(s.projectId));
     if (problems.length) return reply.code(400).send({ message: problems.join('\n'), problems });
     learnLabels(steps);
     return store.saveScenario({ ...s, name: req.body.name?.trim() || s.name, steps, updatedAt: now() });
   });
   app.delete<{ Params: { id: string } }>('/api/scenarios/:id', async (req, reply) => {
     store.deleteScenario(req.params.id);
+    return reply.code(204).send();
+  });
+
+  // ---- Step library ----
+  const mustStep = (id: string) => store.getStep(id) ?? (() => { throw notFound('Step'); })();
+  const usesStep = (text: string, step: LibraryStep, library: LibraryStep[]) => !parseStep(text).ok && matchLibraryStep(text, library)?.step.id === step.id;
+  const stepView = (step: LibraryStep, library = store.listSteps(step.projectId)): LibraryStepView => ({
+    ...step,
+    usedBy: {
+      scenarios: store
+        .listScenarios(step.projectId)
+        .filter((sc) => sc.steps.some((st) => usesStep(st.text, step, library)))
+        .map(({ id, name }) => ({ id, name })),
+      steps: library.filter((o) => o.id !== step.id && o.body.some((b) => usesStep(b.text, step, library))).map(({ id, pattern }) => ({ id, pattern })),
+    },
+  });
+  type StepBody = Partial<Pick<LibraryStep, 'pattern' | 'kind' | 'intent' | 'startScreenId' | 'endScreenId' | 'body' | 'tags'>>;
+  /** Builds the step from a request and checks it; `others` are the project's other library steps. */
+  const checkStep = (base: LibraryStep, b: StepBody, others: LibraryStep[]): LibraryStep => {
+    const next: LibraryStep = { ...base };
+    if (b.pattern !== undefined) next.pattern = b.pattern.trim().replace(/\s+/g, ' ');
+    if (b.kind !== undefined) next.kind = b.kind;
+    if (b.intent !== undefined) next.intent = b.intent.trim();
+    if (b.body !== undefined) next.body = (b.body ?? []).filter((x) => x.text?.trim()).map(({ text, hint }) => ({ text: text.trim(), hint }));
+    if (b.tags !== undefined) next.tags = [...new Set((b.tags ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean))];
+    for (const k of ['startScreenId', 'endScreenId'] as const) {
+      if (b[k] === undefined) continue;
+      if (b[k]) next[k] = mustScreen(b[k]).id;
+      else delete next[k];
+    }
+    const problems = patternProblems(next.pattern);
+    if (!STEP_KINDS.includes(next.kind)) problems.push(`kind must be one of ${STEP_KINDS.join(', ')}`);
+    const key = (p: string) => p.toLowerCase().replace(/\{[^}]*\}/g, '{}');
+    if (others.some((o) => key(o.pattern) === key(next.pattern))) problems.push('Another library step already has that sentence');
+    if (!next.body.length) problems.push('Add at least one step to the body');
+    problems.push(...validateSteps(next.body, others, true));
+    const params = new Set(stepParams(next.pattern));
+    for (const [i, line] of next.body.entries()) {
+      for (const n of stepParams(line.text)) if (!params.has(n)) problems.push(`Step ${i + 1}: {${n}} isn't in the sentence`);
+    }
+    // A step must not end up using itself, directly or through other steps.
+    const all = [...others, next];
+    const reaches = (st: LibraryStep, seen: Set<string>): boolean =>
+      st.body.some((b) => {
+        const m = parseStep(b.text).ok ? undefined : matchLibraryStep(b.text, all);
+        if (!m) return false;
+        if (m.step.id === next.id) return true;
+        if (seen.has(m.step.id)) return false;
+        seen.add(m.step.id);
+        return reaches(m.step, seen);
+      });
+    if (reaches(next, new Set())) problems.push('The body uses this step itself, directly or through another step');
+    if (problems.length) throw Object.assign(new Error(problems.join('\n')), { statusCode: 400, problems });
+    return next;
+  };
+
+  app.get<{ Params: { id: string } }>('/api/projects/:id/steps', async (req) => {
+    const library = store.listSteps(req.params.id);
+    return library.map((s) => stepView(s, library));
+  });
+  app.post<{ Params: { id: string }; Body: StepBody }>('/api/projects/:id/steps', async (req, reply) => {
+    const p = mustProject(req.params.id);
+    const others = store.listSteps(p.id);
+    const blank: LibraryStep = { id: newId('stp'), projectId: p.id, pattern: '', kind: 'action', intent: '', body: [], tags: [], createdAt: now(), updatedAt: now() };
+    const step = checkStep(blank, req.body ?? {}, others);
+    learnLabels(step.body);
+    return reply.code(201).send(stepView(store.saveStep(step)));
+  });
+  app.get<{ Params: { id: string } }>('/api/steps/:id', async (req) => stepView(mustStep(req.params.id)));
+  /** A changed sentence is carried into every scenario and step that uses it, as long as its {values} stay the same. */
+  app.put<{ Params: { id: string }; Body: StepBody }>('/api/steps/:id', async (req) => {
+    const old = mustStep(req.params.id);
+    const library = store.listSteps(old.projectId);
+    const next = checkStep(old, req.body ?? {}, library.filter((o) => o.id !== old.id));
+    const renamed = next.pattern !== old.pattern;
+    const used = stepView(old, library).usedBy;
+    if (renamed && (used.scenarios.length || used.steps.length) && stepParams(next.pattern).join() !== stepParams(old.pattern).join()) {
+      throw badRequest(`Keep the same {values} in the same order while the step is in use (${[...used.scenarios.map((s) => s.name), ...used.steps.map((s) => s.pattern)].join(', ')})`);
+    }
+    const saved = store.saveStep({ ...next, updatedAt: now() });
+    learnLabels(saved.body);
+    if (renamed) {
+      const rewrite = (lines: ScenarioStep[]) =>
+        lines.map((l) => (usesStep(l.text, old, library) ? { ...l, text: renameStepUse(l.text, old.pattern, next.pattern) ?? l.text } : l));
+      for (const { id } of used.scenarios) {
+        const sc = store.getScenario(id)!;
+        store.saveScenario({ ...sc, steps: rewrite(sc.steps), updatedAt: now() });
+      }
+      for (const { id } of used.steps) {
+        const st = store.getStep(id)!;
+        store.saveStep({ ...st, body: rewrite(st.body), updatedAt: now() });
+      }
+    }
+    return stepView(saved);
+  });
+  app.delete<{ Params: { id: string } }>('/api/steps/:id', async (req, reply) => {
+    const { usedBy } = stepView(mustStep(req.params.id));
+    const users = [...usedBy.scenarios.map((s) => `"${s.name}"`), ...usedBy.steps.map((s) => s.pattern)];
+    if (users.length) return reply.code(409).send({ message: `Still used by ${users.join(', ')}` });
+    store.deleteStep(req.params.id);
     return reply.code(204).send();
   });
 
@@ -300,7 +413,7 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
     if (!s) throw notFound('Recording');
     if (!req.body?.name?.trim()) throw badRequest('name is required');
     const steps = (req.body.steps ?? s.steps).map(({ text, hint }) => ({ text, hint }));
-    const problems = validateSteps(steps);
+    const problems = validateSteps(steps, store.listSteps(s.project.id));
     if (problems.length) return reply.code(400).send({ message: problems.join('\n'), problems });
     learnLabels(steps);
     const scenario: Scenario = { id: newId('scn'), projectId: s.project.id, name: req.body.name.trim(), steps, createdAt: now(), updatedAt: now() };

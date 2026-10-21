@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import type { Project, Run, Scenario, Screen } from '@izaro/shared';
+import type { LibraryStepView, Project, Run, Scenario, Screen } from '@izaro/shared';
 import { PROJECTS_CHANGED } from '../workspace/ProjectTree';
 import { api, imageUrl } from '../api';
+import { StepLibrary } from './StepEditor';
 
-type Tab = 'scenarios' | 'screens' | 'settings';
+type Tab = 'scenarios' | 'screens' | 'steps' | 'settings';
 
 export function ProjectDetail({ tab }: { tab: Tab }) {
   const { id } = useParams();
@@ -12,12 +13,14 @@ export function ProjectDetail({ tab }: { tab: Tab }) {
   const [project, setProject] = useState<Project>();
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [screens, setScreens] = useState<Screen[]>([]);
+  const [steps, setSteps] = useState<LibraryStepView[]>([]);
   const [error, setError] = useState('');
 
   const load = () => {
     api<Project>(`/projects/${id}`).then(setProject).catch((e) => setError(e.message));
     api<Scenario[]>(`/projects/${id}/scenarios`).then(setScenarios);
     api<Screen[]>(`/projects/${id}/screens`).then(setScreens);
+    api<LibraryStepView[]>(`/projects/${id}/steps`).then(setSteps);
   };
   useEffect(load, [id]);
 
@@ -95,6 +98,9 @@ export function ProjectDetail({ tab }: { tab: Tab }) {
         <button className={tab === 'screens' ? 'active' : ''} onClick={() => navigate(`/projects/${id}/screens`)}>
           Screen library ({screens.length})
         </button>
+        <button className={tab === 'steps' ? 'active' : ''} onClick={() => navigate(`/projects/${id}/steps`)}>
+          Step library ({steps.length})
+        </button>
         <button className={tab === 'settings' ? 'active' : ''} onClick={() => navigate(`/projects/${id}/settings`)}>
           Settings
         </button>
@@ -124,6 +130,7 @@ export function ProjectDetail({ tab }: { tab: Tab }) {
         </table>
       )}
       {tab === 'screens' && <ScreenLibrary screens={screens} onSaved={load} />}
+      {tab === 'steps' && <StepLibrary projectId={project.id} steps={steps} />}
       {tab === 'settings' && <ProjectSettings project={project} scenarioCount={scenarios.length} screenCount={screens.length} onChange={setProject} />}
     </section>
   );

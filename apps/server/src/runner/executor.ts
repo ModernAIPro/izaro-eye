@@ -3,6 +3,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { Page } from 'playwright';
 import {
+  fillParams,
+  matchLibraryStep,
+  normalizeStep,
   parseStep,
   type Action,
   type FoundTarget,
@@ -213,18 +216,32 @@ interface FlatStep {
   error?: string;
 }
 
-/** Expands `Run "..."` steps (and the project's setup scenario) into one flat list. */
+/**
+ * Expands `Run "..."` steps, library steps (with their values filled in) and the project's setup
+ * scenario into one flat list. `from` is the path of scenario names and library step sentences.
+ */
 export function flatten(store: Store, project: Project, scenario: Scenario): FlatStep[] {
   const byName = new Map(store.listScenarios(project.id).map((s) => [s.name.trim().toLowerCase(), s]));
+  const library = store.listSteps(project.id);
   const out: FlatStep[] = [];
-  const walk = (s: Scenario, from: string | undefined, depth: number, stack: string[]) => {
-    for (const step of s.steps) {
+  const walk = (steps: ScenarioStep[], from: string | undefined, depth: number, stack: string[]) => {
+    for (const step of steps) {
       const parsed = parseStep(step.text);
+      const via = (name: string) => (from ? `${from} › ${name}` : name);
       if (parsed.ok && parsed.action.kind === 'run') {
         const target = byName.get(parsed.action.scenario.trim().toLowerCase());
         if (!target) out.push({ step, from, error: `No scenario named "${parsed.action.scenario}"` });
         else if (depth >= MAX_RUN_DEPTH || stack.includes(target.id)) out.push({ step, from, error: `"${target.name}" runs itself` });
-        else walk(target, from ? `${from} › ${target.name}` : target.name, depth + 1, [...stack, target.id]);
+        else walk(target.steps, via(target.name), depth + 1, [...stack, target.id]);
+      } else if (!parsed.ok && library.length) {
+        // Base steps always win; anything else may be a step from the project's step library.
+        const m = matchLibraryStep(step.text, library);
+        if (!m) out.push({ step, from });
+        else if (depth >= MAX_RUN_DEPTH || stack.includes(m.step.id)) out.push({ step, from, error: `"${m.step.pattern}" uses itself` });
+        else {
+          const body = m.step.body.map((b) => ({ ...b, text: fillParams(b.text, m.args) }));
+          walk(body, via(normalizeStep(step.text)), depth + 1, [...stack, m.step.id]);
+        }
       } else {
         out.push({ step, from });
       }
@@ -235,8 +252,8 @@ export function flatten(store: Store, project: Project, scenario: Scenario): Fla
     const p = parseStep(st.text);
     return p.ok && p.action.kind === 'run' && p.action.scenario.trim().toLowerCase() === setup.name.trim().toLowerCase();
   });
-  if (setup && setup.id !== scenario.id && !callsSetup) walk(setup, setup.name, 1, [setup.id]);
-  walk(scenario, undefined, 0, [scenario.id]);
+  if (setup && setup.id !== scenario.id && !callsSetup) walk(setup.steps, setup.name, 1, [setup.id]);
+  walk(scenario.steps, undefined, 0, [scenario.id]);
   return out;
 }
 

@@ -74,6 +74,11 @@ function ProjectChildren({ project }: { project: Project }) {
           ▦ Screen library
         </NavLink>
       </li>
+      <li>
+        <NavLink to={`/projects/${project.id}/steps`} className="tree-item">
+          ≡ Step library
+        </NavLink>
+      </li>
       {scenarios.map((s) => (
         <ScenarioNode key={s.id} scenario={s} isSetup={s.id === project.setupScenarioId} />
       ))}

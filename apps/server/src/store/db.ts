@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import type { LogEntry, Project, Run, Scenario, Screen, StepResult } from '@izaro/shared';
+import type { LibraryStep, LogEntry, Project, Run, Scenario, Screen, StepResult } from '@izaro/shared';
 
 // SQLite keeps the MVP dependency-free. Each entity is stored as a JSON document
 // with the columns we filter on pulled out; moving to Postgres means
@@ -21,6 +21,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS step_results (id TEXT PRIMARY KEY, run_id TEXT NOT NULL, idx INTEGER NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS run_logs (seq INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL, data TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS run_logs_run ON run_logs (run_id, seq);
+      CREATE TABLE IF NOT EXISTS steps (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS project_secrets (project_id TEXT NOT NULL, name TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (project_id, name));
     `);
   }
@@ -55,7 +56,7 @@ export class Store {
         this.db.prepare('DELETE FROM run_logs WHERE run_id = ?').run(runId);
         this.db.prepare('DELETE FROM runs WHERE id = ?').run(runId);
       }
-      for (const table of ['scenarios', 'screens', 'project_secrets']) this.db.prepare(`DELETE FROM ${table} WHERE project_id = ?`).run(id);
+      for (const table of ['scenarios', 'steps', 'screens', 'project_secrets']) this.db.prepare(`DELETE FROM ${table} WHERE project_id = ?`).run(id);
       this.db.prepare('DELETE FROM projects WHERE id = ?').run(id);
       this.db.exec('COMMIT');
     } catch (e) {
@@ -103,6 +104,20 @@ export class Store {
   }
   deleteScenario(id: string) {
     this.db.prepare('DELETE FROM scenarios WHERE id = ?').run(id);
+  }
+
+  listSteps(projectId: string) {
+    return this.all<LibraryStep>('SELECT data FROM steps WHERE project_id = ? ORDER BY id', projectId);
+  }
+  getStep(id: string) {
+    return this.one<LibraryStep>('SELECT data FROM steps WHERE id = ?', id);
+  }
+  saveStep(s: LibraryStep) {
+    this.db.prepare('INSERT OR REPLACE INTO steps (id, project_id, data) VALUES (?, ?, ?)').run(s.id, s.projectId, JSON.stringify(s));
+    return s;
+  }
+  deleteStep(id: string) {
+    this.db.prepare('DELETE FROM steps WHERE id = ?').run(id);
   }
 
   listRuns(scenarioId: string) {

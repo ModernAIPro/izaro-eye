@@ -65,3 +65,11 @@ The request shape was checked against the live API, including the danger-zone im
 - *TypeSafe API key:* each project can have its own key, used for every jev-img call of that project's runs and recordings. Without one, the server's `TYPESAFE_API_KEY` is used. The key is write-only. It is stored in a separate `project_secrets` table, never returned by the API (only its last 4 characters), and never logged. `PUT /api/projects/:id` now accepts only name, baseUrl, viewport and setupScenarioId.
 - *Delete project:* an in-page confirmation, with no browser dialog, that removes the project's scenarios, runs, step results, logs, videos, screen library and secrets in one transaction, and closes any open recording. Images are content-addressed and may be shared, so they stay on disk.
 
+### 16. Step library, phase 1
+**Ask:** "Can we add step pattern library similar to screen library - eventually this will become skill for agent ? may be - Think like a QA Architect". A design proposal was written (Claude Doc *Step library: design proposal*), and Pradeep chose **"Build Phase 1 as proposed"**.
+**Done:**
+- *Library steps:* a sentence with `{values}`, kind, intent, start and end screens, tags and a body of base or other library steps. Stored per project in a new `steps` table.
+- *Runs:* scenario lines that match a library step expand into its body with the values filled in, keeping the recorded element images. Run results fold them under the line, tagged "library step".
+- *Safeguards:* base steps always win; unique sentences; body `{values}` must be in the sentence; scenarios must pass real values; no step can use itself; a step in use can't be deleted; renaming a step rewrites every use.
+- *UI:* Step library tab and tree item, a step editor with "Used by", "Make reusable step" from selected scenario lines, suggestions while typing, and the library under Step patterns.
+- *Tests:* matching, validation, expansion, renaming and cycles, plus an end-to-end run of `Order "Widget"` on the demo app.

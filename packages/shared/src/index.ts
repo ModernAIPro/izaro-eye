@@ -1,6 +1,7 @@
 // Types shared by the server and the web UI.
 
 export * from './scenario.js';
+export * from './steps.js';
 
 export interface Viewport {
   width: number;

@@ -253,6 +253,29 @@ describe('screen library and scenarios', () => {
     expect(r.results.slice(0, -4).every((x) => x.from === 'Sign in' && x.status === 'passed')).toBe(true);
     expect(r.results[0].from).toBe('Sign in'); // project setup runs first
   });
+
+  it('runs a library step with the values a scenario passes it', async () => {
+    const step = await app.inject({
+      method: 'POST',
+      url: `/api/projects/${project.id}/steps`,
+      payload: { pattern: 'Order "{item}"', kind: 'action', intent: 'Place an order for one item', body: ['Enter "{item}" in "Item"', 'Click "Place order"'].map((text) => ({ text })) },
+    });
+    expect(step.statusCode).toBe(201);
+    const written: Scenario = (
+      await app.inject({
+        method: 'POST',
+        url: `/api/projects/${project.id}/scenarios`,
+        payload: { name: 'Order a widget', steps: ['Order "Widget"', 'Expect to see "Order placed: 1 x Widget"'].map((text) => ({ text })) },
+      })
+    ).json();
+    jev.texts.add('Order placed: 1 x Widget');
+    const r = await run(written);
+    expect(r.results.slice(-3).map((x) => [x.text, x.from, x.status])).toEqual([
+      ['Enter "Widget" in "Item"', 'Order "Widget"', 'passed'],
+      ['Click "Place order"', 'Order "Widget"', 'passed'],
+      ['Expect to see "Order placed: 1 x Widget"', undefined, 'passed'],
+    ]);
+  });
 });
 
 async function measureBroken() {

@@ -268,3 +268,25 @@ body.resizing-y, body.resizing-y * { cursor: row-resize !important; user-select:
 button.danger { background: var(--fail); border-color: var(--fail); color: #fff; }
 .setting .confirm { border: 1px solid var(--fail); border-radius: 6px; padding: 10px 14px; background: color-mix(in srgb, var(--fail) 6%, transparent); }
 .setting .confirm p { margin: 0 0 10px; }
+
+/* Step library */
+.badge + .badge { margin-left: 4px; }
+.badge.muted { background: none; border: 1px solid var(--border); color: var(--muted); }
+.step-group-title .tag { font-size: 10px; border: 1px solid var(--border); border-radius: 8px; padding: 0 5px; color: var(--muted); margin-left: 4px; }
+.step-library .row { margin-bottom: 12px; }
+.step-library .row input { flex: 1; max-width: 360px; }
+.step-editor { display: flex; flex-direction: column; gap: 12px; overflow: auto; }
+.step-editor .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.step-editor .field > span:first-child { font-size: 12px; font-weight: 600; color: var(--muted); }
+.step-editor .field-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.step-editor .field.grow { flex: 1 1 180px; }
+.step-editor .step-pattern { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.step-editor .step-body { min-height: 140px; }
+.step-editor .used-by ul { margin: 0; padding-left: 18px; }
+.suggestions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; }
+.chip { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--panel, transparent); color: var(--text); }
+.chip:hover { border-color: var(--accent); }
+.push-right { margin-left: auto; }
+.patterns-body h4 { margin: 12px 0 4px; font-size: 13px; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
