@@ -70,6 +70,11 @@ function ProjectChildren({ project }: { project: Project }) {
         </NavLink>
       </li>
       <li>
+        <NavLink to={`/projects/${project.id}/insights`} className="tree-item">
+          ◑ Insights
+        </NavLink>
+      </li>
+      <li>
         <NavLink to={`/projects/${project.id}/screens`} className="tree-item">
           ▦ Screen library
         </NavLink>

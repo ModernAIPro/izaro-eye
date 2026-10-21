@@ -15,4 +15,9 @@ export const config = {
     url: process.env.TYPESAFE_API_URL || 'https://api.typesafe.ai/v1/systemone',
     model: process.env.JEV_MODEL || 'jev-1.14.0',
   },
+  /** Claude writes the plain-language summary on the Insights tab; without a key the tab says so. */
+  claude: {
+    apiKey: process.env.ANTHROPIC_API_KEY || '',
+    model: process.env.CLAUDE_MODEL || 'claude-opus-5-5',
+  },
 };

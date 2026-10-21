@@ -73,3 +73,17 @@ The request shape was checked against the live API, including the danger-zone im
 - *Safeguards:* base steps always win; unique sentences; body `{values}` must be in the sentence; scenarios must pass real values; no step can use itself; a step in use can't be deleted; renaming a step rewrites every use.
 - *UI:* Step library tab and tree item, a step editor with "Used by", "Make reusable step" from selected scenario lines, suggestions while typing, and the library under Step patterns.
 - *Tests:* matching, validation, expansion, renaming and cycles, plus an end-to-end run of `Order "Widget"` on the demo app.
+
+### 17. Test results insights
+**Ask:** "Create Test Results insights in the project level - Sample screen included", with a screenshot of Playwright Smart Reporter's Insights page.
+**Done:** an **Insights** tab on the project page and in the tree.
+- It reads each scenario's latest finished run and up to 10 earlier runs.
+- Tiles: failed, pass rate, duration, scenarios, flaky and a health grade, with a result bar under them.
+- Sections for izaro-eye's runs:
+  - Visual changes waiting for review, grouped by jev-img's label.
+  - Failure clusters.
+  - Regressions, at risk, slowest, most flaky, fixed and new scenarios.
+- Every item links to that run on the scenario page.
+- *AI summary:* Claude writes a short summary from the computed numbers when `ANTHROPIC_API_KEY` is set on the server. TypeSafe Jev only answers visual questions, so it can't write the summary. Without a key the section says it is not configured. The live call wasn't exercised in the sandbox, which has no key.
+- *Not carried over from the sample:* quality gate and quarantine, which izaro-eye doesn't have.
+

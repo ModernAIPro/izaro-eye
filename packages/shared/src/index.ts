@@ -192,3 +192,57 @@ export type RecorderServerMessage =
   | { type: 'url'; url: string }
   | { type: 'busy'; busy: boolean }
   | { type: 'error'; message: string };
+
+// ---- Test results insights ----
+
+/** One scenario in an insights list, pointing at the run the item is about. */
+export interface InsightItem {
+  scenarioId: string;
+  name: string;
+  runId?: string;
+  status?: RunStatus;
+  /** Milliseconds, for the run pointed at. */
+  durationMs?: number;
+  /** A short reason, e.g. "failed after passing" or "3 flips in 10 runs". */
+  note?: string;
+}
+
+/** Failed steps across the latest runs that share the same cause. */
+export interface FailureCluster {
+  error: string;
+  count: number;
+  items: InsightItem[];
+}
+
+/** Steps waiting for review, by what jev-img saw. */
+export interface ReviewGroup {
+  label: string;
+  count: number;
+  items: InsightItem[];
+}
+
+/** Project-level insights from each scenario's latest run and its recent history. */
+export interface ProjectInsights {
+  /** When the most recent of the latest runs started. */
+  asOf?: string;
+  scenarios: number;
+  newScenarios: number;
+  neverRun: number;
+  counts: { passed: number; failed: number; review: number; notRun: number };
+  failedNew: number;
+  /** Passed share of the scenarios that have run, 0-100. */
+  passRate?: number;
+  durationMs: number;
+  flaky: number;
+  health?: { grade: 'A' | 'B' | 'C' | 'D' | 'F'; score: number; pass: number; stability: number; perf: number };
+  clusters: FailureCluster[];
+  reviews: ReviewGroup[];
+  slowest: InsightItem[];
+  atRisk: InsightItem[];
+  regressions: InsightItem[];
+  fixed: InsightItem[];
+  mostFlaky: InsightItem[];
+  newest: InsightItem[];
+  /** Whether an AI summary can be asked for (a Claude key is set on the server). */
+  aiAvailable: boolean;
+}

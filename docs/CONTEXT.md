@@ -66,6 +66,23 @@ Each project has a **step library**: reusable steps in the project's own words, 
 - **Run streaming.** Over the WebSocket `/api/runs/:id/events`: `state`, `frame` (live screencast), `logs` and `log`. Logs come from `typesafe` (every Jev question and its answer, through `LoggedVision`), `browser` (console messages, page errors, failed requests, responses ≥400, navigations) and `runner`. They are stored in the `run_logs` table.
 - **Video.** Playwright's `recordVideo` is saved to `<data>/videos/<runId>.webm` and served at `/api/runs/:id/video`. If saving fails, the run carries on and a warning is logged.
 
+## Insights
+
+A project's **Insights** tab (`apps/server/src/insights.ts`, `GET /api/projects/:id/insights`, `pages/Insights.tsx`) reports on each scenario's latest finished run, with trends from up to its last 10 runs. It was modelled on Playwright Smart Reporter's Insights page.
+
+- Tiles: failed (and how many are newly failing), pass rate, total duration, scenarios (new in the last 7 days, never run), flaky, and a health grade. A pass/review/fail/not-run bar sits under the tiles.
+- **Review is not failure.** A run in review counts as not failing in trends, and as half a pass in the health score.
+- Sections:
+  - Visual changes to review, grouped by jev-img's label.
+  - Failure clusters: errors grouped with quoted labels and numbers taken out.
+  - Regressions (failed after passing) and Fixed (passed after failing).
+  - At risk: passing now, but failed within the 5 runs before the last one.
+  - Slowest.
+  - Most flaky: 3 or more pass/fail switches.
+  - New scenarios.
+- Health: pass score × 0.6 + stability × 0.25 + performance × 0.15. Grades: A ≥ 90, B ≥ 80, C ≥ 70, D ≥ 60, otherwise F. Performance is the share of scenarios whose latest run took no more than 1.5× their median time.
+- **AI summary:** on request, Claude (`claude-opus-5-5`, low effort, with server-side refusal fallback) writes 3–5 sentences from the computed insights only (no screenshots or secrets). It needs `ANTHROPIC_API_KEY` in `apps/server/.env`; without it the tab says it is not configured. TypeSafe Jev is a vision model, so it isn't used for text.
+
 ## jev-img / TypeSafe
 
 - API: `https://api.typesafe.ai/v1/systemone`, model `jev-1.14.0`, which is needed for Box visual processing. Requests send the header `TypeSafe-Danger-Zone-Images: true`.
@@ -83,20 +100,20 @@ packages/shared    Types, the scenario sentence parser, recorder and run WebSock
 examples/demo-aut  Small login + order app on :5050 (variant "broken" for regressions)
 ```
 
-Key web files: `App.tsx` (workspace grid and splitters), `workspace/ProjectTree.tsx`, `workspace/LogsPane.tsx`, `workspace/RunStream.tsx` (one WebSocket per open run), `workspace/Splitter.tsx` (`usePaneSize`, `Splitter`), `pages/ScenarioEditor.tsx` (editor and run on one page, `?run=`), `pages/RunDetail.tsx` (stage, steps with setup grouping), `pages/Recorder.tsx`, `pages/ProjectDetail.tsx`, `pages/StepEditor.tsx` (step editor and the Step library tab).
+Key web files: `App.tsx` (workspace grid and splitters), `workspace/ProjectTree.tsx`, `workspace/LogsPane.tsx`, `workspace/RunStream.tsx` (one WebSocket per open run), `workspace/Splitter.tsx` (`usePaneSize`, `Splitter`), `pages/ScenarioEditor.tsx` (editor and run on one page, `?run=`), `pages/RunDetail.tsx` (stage, steps with setup grouping), `pages/Recorder.tsx`, `pages/ProjectDetail.tsx`, `pages/StepEditor.tsx` (step editor and the Step library tab), `pages/Insights.tsx`.
 
 ## Environment and running
 
 - Node 26 (`.nvmrc`). pnpm 10 or newer, installed with `npm i -g pnpm` because Node 26 has no corepack.
 - `pnpm install`, `pnpm --filter @izaro/server exec playwright install chromium`, then `cp .env.example apps/server/.env` and `pnpm dev` (API on :4000, UI on :5173).
 - A project can have its own TypeSafe key (project page › Settings). It is write-only: stored server-side in `project_secrets`, never returned or logged. Without one, the server key is used.
-- `apps/server/.env` holds `TYPESAFE_API_KEY`, `AUT_PASSWORD` and the optional `TYPESAFE_API_URL`, `JEV_MODEL`, `BROWSER_CHANNEL`, `CHROMIUM_PATH` and `DATA_DIR`.
-- Tests: `pnpm test` (parser, step library, pixel diff, Jev requests, project settings, and end-to-end tests on the demo app). There are 24 tests.
+- `apps/server/.env` holds `TYPESAFE_API_KEY`, `AUT_PASSWORD` and the optional `ANTHROPIC_API_KEY`, `CLAUDE_MODEL`, `TYPESAFE_API_URL`, `JEV_MODEL`, `BROWSER_CHANNEL`, `CHROMIUM_PATH` and `DATA_DIR`.
+- Tests: `pnpm test` (parser, step library, pixel diff, Jev requests, project settings, insights, and end-to-end tests on the demo app). There are 28 tests.
 
 ## Working agreements
 
 - **Repo:** `ModernAIPro/izaro-eye`. Work lands on the **`mvp`** branch. **Ask Pradeep before pushing** to mvp, opening PRs or creating repositories, unless he has already said yes to that change.
-- **Secrets:** the TypeSafe API key and the AUT login live only in the local, gitignored `apps/server/.env`. They never go into commits, docs, archives or artifacts. Before every push, check that `git log -p` has no `apikey_` and that no `.env` is tracked.
+- **Secrets:** the TypeSafe and Anthropic API keys and the AUT login live only in the local, gitignored `apps/server/.env`. They never go into commits, docs, archives or artifacts. Before every push, check that `git log -p` has no `apikey_` and that no `.env` is tracked.
 - When Pradeep says to skip tests for a task, build and typecheck only.
 - Commits end with the Claude co-author and session attribution lines.
 

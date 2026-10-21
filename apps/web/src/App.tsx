@@ -57,6 +57,7 @@ export function App() {
               <Route path="/projects/new" element={<NewProject />} />
               <Route path="/projects/:id" element={<ProjectDetail tab="scenarios" />} />
               <Route path="/projects/:id/screens" element={<ProjectDetail tab="screens" />} />
+              <Route path="/projects/:id/insights" element={<ProjectDetail tab="insights" />} />
               <Route path="/projects/:id/steps" element={<ProjectDetail tab="steps" />} />
               <Route path="/projects/:id/steps/new" element={<StepEditor key="new" />} />
               <Route path="/steps/:id" element={<StepEditorFor />} />

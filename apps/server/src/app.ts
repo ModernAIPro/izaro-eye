@@ -27,6 +27,8 @@ import { crop } from './browser.js';
 import { config } from './config.js';
 import { defaultVision, JevVision, type Vision } from './compare/jev.js';
 import { newId, now } from './ids.js';
+import { summarizeInsights } from './ai-summary.js';
+import { computeInsights } from './insights.js';
 import { Library } from './library.js';
 import { RecorderRegistry } from './recorder/session.js';
 import { RunQueue, runEvents, videoPath } from './runner/executor.js';
@@ -304,6 +306,31 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
     if (users.length) return reply.code(409).send({ message: `Still used by ${users.join(', ')}` });
     store.deleteStep(req.params.id);
     return reply.code(204).send();
+  });
+
+  // ---- Insights ----
+  const insightsFor = (projectId: string) => {
+    const scenarios = store.listScenarios(projectId);
+    const runs = new Map(scenarios.map((s) => [s.id, store.listRuns(s.id)]));
+    const results = new Map(
+      scenarios.map((s) => {
+        const last = runs.get(s.id)!.find((r) => r.status !== 'queued' && r.status !== 'running');
+        return [s.id, last ? store.listResults(last.id) : []];
+      }),
+    );
+    return computeInsights({ scenarios, runs, results, aiAvailable: !!config.claude.apiKey });
+  };
+  app.get<{ Params: { id: string } }>('/api/projects/:id/insights', async (req) => insightsFor(mustProject(req.params.id).id));
+  app.post<{ Params: { id: string } }>('/api/projects/:id/insights/summary', async (req) => {
+    const p = mustProject(req.params.id);
+    const insights = insightsFor(p.id);
+    if (!insights.aiAvailable) throw badRequest('Set ANTHROPIC_API_KEY in apps/server/.env to get an AI summary');
+    try {
+      return { summary: await summarizeInsights(p.name, insights) };
+    } catch (e) {
+      req.log.warn({ err: (e as Error).message }, 'AI summary failed');
+      throw Object.assign(new Error(`The AI summary failed: ${(e as Error).message}`), { statusCode: 502 });
+    }
   });
 
   // ---- Runs ----

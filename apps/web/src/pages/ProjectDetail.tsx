@@ -3,9 +3,10 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { LibraryStepView, Project, Run, Scenario, Screen } from '@izaro/shared';
 import { PROJECTS_CHANGED } from '../workspace/ProjectTree';
 import { api, imageUrl } from '../api';
+import { Insights } from './Insights';
 import { StepLibrary } from './StepEditor';
 
-type Tab = 'scenarios' | 'screens' | 'steps' | 'settings';
+type Tab = 'scenarios' | 'insights' | 'screens' | 'steps' | 'settings';
 
 export function ProjectDetail({ tab }: { tab: Tab }) {
   const { id } = useParams();
@@ -95,6 +96,9 @@ export function ProjectDetail({ tab }: { tab: Tab }) {
         <button className={tab === 'scenarios' ? 'active' : ''} onClick={() => navigate(`/projects/${id}`)}>
           Scenarios ({scenarios.length})
         </button>
+        <button className={tab === 'insights' ? 'active' : ''} onClick={() => navigate(`/projects/${id}/insights`)}>
+          Insights
+        </button>
         <button className={tab === 'screens' ? 'active' : ''} onClick={() => navigate(`/projects/${id}/screens`)}>
           Screen library ({screens.length})
         </button>
@@ -130,6 +134,7 @@ export function ProjectDetail({ tab }: { tab: Tab }) {
         </table>
       )}
       {tab === 'screens' && <ScreenLibrary screens={screens} onSaved={load} />}
+      {tab === 'insights' && <Insights projectId={project.id} />}
       {tab === 'steps' && <StepLibrary projectId={project.id} steps={steps} />}
       {tab === 'settings' && <ProjectSettings project={project} scenarioCount={scenarios.length} screenCount={screens.length} onChange={setProject} />}
     </section>
