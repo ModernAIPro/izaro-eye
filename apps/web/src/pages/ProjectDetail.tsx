@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { Project, Run, Scenario, Screen } from '@izaro/shared';
+import { PROJECTS_CHANGED } from '../workspace/ProjectTree';
 import { api, imageUrl } from '../api';
 
 type Tab = 'scenarios' | 'screens';
@@ -35,6 +36,7 @@ export function ProjectDetail({ tab }: { tab: Tab }) {
     // null (not undefined, which JSON drops) so that "none" really clears it.
     setProject(await api<Project>(`/projects/${id}`, { method: 'PUT', json: { setupScenarioId: pendingSetup || null } }));
     setPendingSetup(undefined);
+    window.dispatchEvent(new Event(PROJECTS_CHANGED));
   };
 
   if (!project) return <p>{error || 'Loading…'}</p>;

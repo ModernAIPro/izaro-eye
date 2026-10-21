@@ -3,6 +3,9 @@ import { Link, NavLink, useLocation } from 'react-router-dom';
 import type { Project, Run, Scenario } from '@izaro/shared';
 import { api } from '../api';
 
+/** Fired after a project setting changes on another page, so the tree (e.g. its "setup" tag) refreshes. */
+export const PROJECTS_CHANGED = 'izaro:projects-changed';
+
 const STATUS_ICON: Record<string, string> = { passed: '✓', failed: '✕', error: '!', review: '◐', running: '●', queued: '○' };
 
 /** Left pane: projects, each with its screen library and a tree of scenarios and their recent runs. */
@@ -11,12 +14,18 @@ export function ProjectTree() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [open, setOpen] = useState<Record<string, boolean>>({});
 
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    const changed = () => setVersion((v) => v + 1);
+    window.addEventListener(PROJECTS_CHANGED, changed);
+    return () => window.removeEventListener(PROJECTS_CHANGED, changed);
+  }, []);
   useEffect(() => {
     api<Project[]>('/projects').then((ps) => {
       setProjects(ps);
       setOpen((o) => (Object.keys(o).length || !ps[0] ? o : { [ps[0].id]: true }));
     });
-  }, [location.pathname]);
+  }, [location.pathname, version]);
 
   return (
     <nav className="tree">
