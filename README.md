@@ -60,7 +60,7 @@ To see a regression with the demo app, run `curl -X POST localhost:5050/__varian
 
 Docker: `docker build -t izaro-eye . && docker run -p 4000:4000 --env-file .env -v izaro-data:/data izaro-eye`.
 
-Vercel: `vercel.json` deploys two services in one project. `web` (Vite, `apps/web`) serves every path, and `server` (a container built from the root `Dockerfile`) serves `/api/*`. The browser calls `/api` on the same domain, so neither service needs a binding. Vercel containers have no persistent disk, so the SQLite database, images and videos under `DATA_DIR` are lost when an instance is replaced. Test locally with `vercel dev`.
+Vercel + a Mac: `vercel.json` serves the UI from Vercel and forwards `/api/*` to `https://api.starkfarms.in`, a Cloudflare Tunnel to the server running on a Mac. See [docs/DEPLOY.md](docs/DEPLOY.md).
 
 Railway: `railway.json` builds the root `Dockerfile` with one replica and a health check on `/api/health`. Add a volume mounted at `/data` in the Railway service, or data is lost on each deploy. When the UI is served from another host that proxies `/api`, build it with `VITE_WS_ORIGIN` set to the server's `wss://` origin, so WebSockets connect to the server directly.
 

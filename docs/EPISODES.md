@@ -107,3 +107,8 @@ The request shape was checked against the live API, including the danger-zone im
 **Done (part 1):** `railway.json` (root `Dockerfile`, 1 replica, health check `/api/health`). `VOLUME` was removed from the Dockerfile because Railway rejects it, and `docker run -v` still works without it. The UI now reads `VITE_WS_ORIGIN` for WebSockets, because Vercel's proxy only carries HTTP to an external server.
 **Free plan limits:** 0.5 GB RAM, a 0.5 GB volume and $1 of credit a month. The server has to sleep when idle (App Sleeping), or an always-on instance uses up the credit within days.
 **Next:** once the Railway URL exists, point Vercel's `/api` rewrite at it and drop the Vercel `server` service.
+
+### 21. Server on Pradeep's Mac through a Cloudflare Tunnel
+**Ask:** Railway's free plan was too small to run Chromium on, so Pradeep picked "Your own Mac plus a Cloudflare Tunnel".
+**Done:** `vercel.json` now has only the `web` service and forwards `/api/*` to `https://api.starkfarms.in/api/*`. Vercel's `server` service was dropped. `docs/DEPLOY.md` covers moving DNS to Cloudflare, running the server, setting up `cloudflared` and setting `VITE_WS_ORIGIN` on Vercel. `railway.json` stays in the repo, unused.
+**Caveat:** the API has no login, and the server can drive Chromium on the Mac to any URL, including the home network.

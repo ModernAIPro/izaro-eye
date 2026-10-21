@@ -1,11 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "services": {
-    "server": {
-      "root": ".",
-      "runtime": "container",
-      "entrypoint": "Dockerfile"
-    },
     "web": {
       "root": "apps/web",
       "framework": "vite"
@@ -14,7 +9,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": { "service": "server" }
+      "destination": "https://api.starkfarms.in/api/$1"
     },
     {
       "source": "/(.*)",
