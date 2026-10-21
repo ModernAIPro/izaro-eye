@@ -51,6 +51,8 @@ export class RecorderSession extends EventEmitter {
     private deps: RecorderDeps,
     readonly project: Project,
     private startUrl?: string,
+    /** A scenario to replay before recording, only when the user asks for one (e.g. to start signed in). */
+    private startAfterId?: string,
   ) {
     super();
   }
@@ -63,12 +65,14 @@ export class RecorderSession extends EventEmitter {
     });
     await page.goto(this.project.baseUrl);
 
-    const setup = this.project.setupScenarioId ? this.deps.store.getScenario(this.project.setupScenarioId) : undefined;
-    if (setup) {
-      const failed = await this.runSetup(page, setup).catch((e: Error) => e.message);
+    // Recording never depends on scenarios passing: nothing is replayed unless the user picked a scenario
+    // to start after, and if that one stops early, recording simply begins from wherever it got to.
+    const before = this.startAfterId ? this.deps.store.getScenario(this.startAfterId) : undefined;
+    if (before) {
+      const failed = await this.replay(page, before).catch((e: Error) => e.message);
       if (failed) {
-        this.notice = `The setup scenario "${setup.name}" did not finish (${failed}). Recording starts from the screen it reached and will not include "Run ${setup.name}". Fix that scenario, or choose another setup scenario on the project page.`;
-      } else this.steps.push({ text: stepText({ kind: 'run', scenario: setup.name }) });
+        this.notice = `"${before.name}" did not finish (${failed}). Recording starts from the screen it reached and will not include "Run ${before.name}".`;
+      } else this.steps.push({ text: stepText({ kind: 'run', scenario: before.name }) });
     }
     if (this.startUrl) {
       await page.goto(new URL(this.startUrl, this.project.baseUrl).toString());
@@ -89,8 +93,8 @@ export class RecorderSession extends EventEmitter {
     });
   }
 
-  /** Runs the setup scenario; returns why it stopped, or undefined when every step passed. */
-  private async runSetup(page: Page, setup: Scenario): Promise<string | undefined> {
+  /** Replays a scenario; returns why it stopped, or undefined when every step passed. */
+  private async replay(page: Page, setup: Scenario): Promise<string | undefined> {
     const exec = new Executor(this.deps, this.project, page);
     for (const { step, error } of flatten(this.deps.store, this.project, setup)) {
       const p = parseStep(step.text);
@@ -262,8 +266,8 @@ export class RecorderRegistry {
 
   constructor(private deps: RecorderDeps) {}
 
-  async create(project: Project, startUrl?: string) {
-    const s = new RecorderSession(this.deps, project, startUrl);
+  async create(project: Project, startUrl?: string, startAfterId?: string) {
+    const s = new RecorderSession(this.deps, project, startUrl, startAfterId);
     try {
       await s.start();
     } catch (e) {

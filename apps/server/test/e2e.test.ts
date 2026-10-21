@@ -168,9 +168,14 @@ describe('screen library and scenarios', () => {
     expect(screens[0].next).toHaveLength(1);
   });
 
-  it('runs the setup scenario first when recording, and reruns visually', async () => {
+  it('records after a chosen scenario, and reruns visually', async () => {
     project = (await app.inject({ method: 'PUT', url: `/api/projects/${project.id}`, payload: { setupScenarioId: signIn.id } })).json();
-    const created = (await app.inject({ method: 'POST', url: `/api/projects/${project.id}/recordings`, payload: {} })).json();
+    // The setup scenario is for runs; recording starts from the address unless told otherwise.
+    const plain = (await app.inject({ method: 'POST', url: `/api/projects/${project.id}/recordings`, payload: {} })).json();
+    expect(app.izaro.recorders.get(plain.id)!.steps.map((s) => s.text)).toEqual(['Expect the "Login" screen']);
+    await app.inject({ method: 'DELETE', url: `/api/recordings/${plain.id}` });
+
+    const created = (await app.inject({ method: 'POST', url: `/api/projects/${project.id}/recordings`, payload: { startAfter: signIn.id } })).json();
     const rec = app.izaro.recorders.get(created.id)!;
     expect(rec.steps.map((s) => s.text)).toEqual(['Run "Sign in"', 'Expect the "Dashboard" screen']);
 

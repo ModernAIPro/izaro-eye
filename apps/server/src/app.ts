@@ -229,9 +229,11 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
   });
 
   // ---- Recorder ----
-  app.post<{ Params: { id: string }; Body: { startUrl?: string } }>('/api/projects/:id/recordings', async (req, reply) => {
+  app.post<{ Params: { id: string }; Body: { startUrl?: string; startAfter?: string } }>('/api/projects/:id/recordings', async (req, reply) => {
     const p = mustProject(req.params.id);
-    const s = await recorders.create(p, req.body?.startUrl || undefined);
+    const after = req.body?.startAfter ? mustScenario(req.body.startAfter) : undefined;
+    if (after && after.projectId !== p.id) throw notFound('Scenario');
+    const s = await recorders.create(p, req.body?.startUrl || undefined, after?.id);
     return reply.code(201).send({ id: s.id, viewport: p.viewport, steps: s.steps, notice: s.notice });
   });
   app.get<{ Params: { id: string } }>('/api/recordings/:id/ws', { websocket: true }, (socket, req) => {

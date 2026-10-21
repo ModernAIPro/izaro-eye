@@ -248,3 +248,6 @@ body.resizing-y, body.resizing-y * { cursor: row-resize !important; user-select:
   .pane-left { border-right: none; border-bottom: 1px solid var(--border); }
   .pane-right { grid-column: auto; }
 }
+
+.start-after { display: flex; align-items: center; gap: 6px; white-space: nowrap; color: var(--muted); }
+.start-after select { width: auto; font-size: 12px; padding: 3px 6px; }

@@ -31,7 +31,7 @@ Secrets are written as `{{secret:NAME}}` and read from the server environment (e
 
 - **Recording.** The server runs Chromium and streams it into the web UI; your mouse and keyboard are forwarded to it. For every click izaro-eye saves an image of the control (jev-img finds its edges from a crosshair-marked screenshot) and adds a `Click "?"` step; typing turns it into `Enter "..." in "?"`. You name each `?` the way a user would describe it. Each time the screen settles, it is matched against the library (pixels first, jev-img "same screen?" for the same address) and new screens are added, with an `Expect the "..." screen` step.
 - **Screen library.** Screens with their names, addresses, the controls used on them (image + name) and which control leads to which screen. Names can be edited on the project's *Screen library* tab.
-- **Setup scenario.** Record sign-in as an ordinary scenario and pick it as the project's setup scenario; it runs before every other scenario and before each recording.
+- **Setup scenario.** Record sign-in as an ordinary scenario and pick it as the project's setup scenario; it runs before every other scenario. Recording is separate from runs: it starts from the project's address, or, if you choose *Start from: after "Sign in"* on the record page, after replaying that scenario. A scenario that fails never stops you from recording.
 - **Execution.** For each step:
   1. *Exact match*: if the control's library image is still pixel-identical at the same place, it is clicked without calling jev-img.
   2. *jev-img find*: otherwise jev-img is asked "is the "label" control visible?" and "where is it?" (with the library image as a hint). It retries after a pause and after scrolling.
@@ -54,7 +54,7 @@ pnpm dev                           # API on :4000, UI on :5173
 
 If the Chromium download cannot finish, install Google Chrome and set `BROWSER_CHANNEL=chrome` in `apps/server/.env` to use it instead.
 
-Open http://localhost:5173, create a project with the app's start address (demo: `http://localhost:5050`), then **Record**. For the demo, record signing in (click the username field, type `admin`, click the password field, *Insert secret*, click *Sign in*), name the elements, save it as "Sign in" and choose it as the setup scenario.
+Open http://localhost:5173, create a project with the app's start address (demo: `http://localhost:5050`), then **Record**. For the demo, record signing in (click the username field, type `admin`, click the password field, *Insert secret*, click *Sign in*), name the elements, save it as "Sign in" and choose it as the setup scenario. To record behind the login, pick *Start from: after "Sign in"* on the record page.
 
 To see a regression with the demo app, run `curl -X POST localhost:5050/__variant -d '{"variant":"broken"}'` and run a scenario again.
 

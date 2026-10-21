@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type WheelEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
-import { parseStep, UNLABELLED, type RecorderClientMessage, type RecorderServerMessage, type RecorderStep, type Viewport } from '@izaro/shared';
+import { parseStep, UNLABELLED, type RecorderClientMessage, type Scenario, type RecorderServerMessage, type RecorderStep, type Viewport } from '@izaro/shared';
 import { api, imageUrl, wsUrl } from '../api';
 import { useSidePaneSlot } from '../workspace/RunStream';
 
@@ -24,11 +24,25 @@ export function Recorder() {
   const [notice, setNotice] = useState('');
   const [starting, setStarting] = useState(true);
   const slot = useSidePaneSlot();
+  // Recording starts from the project's address; replaying a scenario first (e.g. to be signed in) is opt-in.
+  const [startAfter, setStartAfter] = useState('');
+  const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  useEffect(() => {
+    api<Scenario[]>(`/projects/${projectId}/scenarios`).then(setScenarios);
+  }, [projectId]);
 
   useEffect(() => {
     let closed = false;
     let sid: string | undefined;
-    api<{ id: string; viewport: Viewport; notice?: string }>(`/projects/${projectId}/recordings`, { method: 'POST', json: {} })
+    setStarting(true);
+    setSession(undefined);
+    setSteps([]);
+    setError('');
+    setNotice('');
+    api<{ id: string; viewport: Viewport; notice?: string }>(`/projects/${projectId}/recordings`, {
+      method: 'POST',
+      json: startAfter ? { startAfter } : {},
+    })
       .then((s) => {
         if (closed) return api(`/recordings/${s.id}`, { method: 'DELETE' });
         sid = s.id;
@@ -46,7 +60,7 @@ export function Recorder() {
       if (sid) fetch(`/api/recordings/${sid}`, { method: 'DELETE', keepalive: true }).catch(() => {});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
+  }, [projectId, startAfter]);
 
   const onServer = (m: RecorderServerMessage) => {
     if (m.type === 'frame') {
@@ -132,9 +146,27 @@ export function Recorder() {
           >
             <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Address" />
           </form>
+          <label className="start-after small">
+            Start from{' '}
+            <select
+              value={startAfter}
+              disabled={starting}
+              onChange={(e) => {
+                if (steps.length > 1 && !confirm('Start over? The steps recorded so far will be discarded.')) return;
+                setStartAfter(e.target.value);
+              }}
+            >
+              <option value="">the project's address</option>
+              {scenarios.map((sc) => (
+                <option key={sc.id} value={sc.id}>
+                  after "{sc.name}"
+                </option>
+              ))}
+            </select>
+          </label>
           {busy && <span className="muted">capturing element…</span>}
         </div>
-        {starting && <p className="muted">Starting browser (and running the setup scenario, if any)…</p>}
+        {starting && <p className="muted">{startAfter ? 'Starting the browser and replaying the chosen scenario…' : 'Starting the browser…'}</p>}
         {notice && <p className="notice">{notice}</p>}
         {error && <p className="error">{error}</p>}
         {session && (
