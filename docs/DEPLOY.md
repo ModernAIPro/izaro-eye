@@ -22,7 +22,7 @@ Use Node 26 and pnpm 10 or later, from the repo checkout on the `mvp` branch.
 ```sh
 pnpm install
 pnpm --filter @izaro/server exec playwright install chromium
-cp .env.example .env   # then fill in TYPESAFE_API_KEY, AUT_PASSWORD; keep .env out of git
+cp .env.example apps/server/.env   # fill in TYPESAFE_API_KEY, AUT_PASSWORD; the server reads .env from apps/server
 DATA_DIR="$HOME/izaro-data" pnpm --filter @izaro/server start
 ```
 
@@ -57,7 +57,7 @@ starts at login with `sudo cloudflared service install`.
 - **Settings → Environment Variables:** add `VITE_WS_ORIGIN` = `wss://api.starkfarms.in`
   for Production and Preview. WebSockets (live runs, the recorder) connect to the
   server directly, because Vercel's `/api` proxy only carries HTTP.
-- Remove the old server variables from Vercel, such as `TYPESAFE_API_KEY`. They now live in the Mac's `.env`.
+- Remove the old server variables from Vercel, such as `TYPESAFE_API_KEY`. They now live in `apps/server/.env` on the Mac.
 - Redeploy `mvp`.
 
 ## Keeping it up
