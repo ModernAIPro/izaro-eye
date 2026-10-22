@@ -7,7 +7,7 @@ import { config } from './config.js';
 // and takes screenshots. Nothing reads or queries the page's DOM.
 
 export function launchBrowser(): Promise<Browser> {
-  return chromium.launch({ headless: config.headless, executablePath: config.chromiumPath, channel: config.browserChannel });
+  return chromium.launch({ headless: config.headless, executablePath: config.chromiumPath, channel: config.browserChannel, timeout: 60_000 });
 }
 
 /**

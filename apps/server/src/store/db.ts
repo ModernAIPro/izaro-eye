@@ -133,6 +133,11 @@ export class Store {
     return r;
   }
 
+  /** Runs still marked queued or running from before this process started; nothing is executing them any more. */
+  listUnfinishedRuns() {
+    return this.all<Run>("SELECT data FROM runs WHERE json_extract(data, '$.status') IN ('queued', 'running')");
+  }
+
   listResults(runId: string) {
     return this.all<StepResult>('SELECT data FROM step_results WHERE run_id = ? ORDER BY idx', runId);
   }

@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { Page } from 'playwright';
+import type { Browser, Page } from 'playwright';
 import {
   fillParams,
   matchLibraryStep,
@@ -285,16 +285,20 @@ export async function executeRun(deps: ExecutorDeps, scenario: Scenario, run: Ru
   log({ level: 'info', message: `Running "${scenario.name}" on ${project.baseUrl} with ${projectVision.name}${projectVision !== deps.vision ? ' (project key)' : ''}` });
 
   const results: StepResult[] = [];
-  const browser = await launchBrowser();
   const videoTmp = deps.videoDir ? path.join(deps.videoDir, 'tmp', run.id) : undefined;
+  let browser: Browser | undefined;
   let page: Page | undefined;
   try {
+    browser = await launchBrowser().catch((e) => {
+      throw new Error(`The browser did not start: ${(e as Error).message.split('\n')[0]}`);
+    });
+    log({ level: 'info', message: 'Browser started' });
     page = await newContext(browser, project, { videoDir: videoTmp })
       .then((c) => c.newPage())
       .catch(async (e) => {
         // Video needs Playwright's ffmpeg (installed with `playwright install chromium`); run without it if missing.
         log({ level: 'warn', message: `Video recording is not available: ${(e as Error).message.split('\n')[0]}` });
-        return (await newContext(browser, project)).newPage();
+        return (await newContext(browser!, project)).newPage();
       });
     watchBrowser(page, log);
     await streamFrames(page, run.id);
@@ -336,6 +340,7 @@ export async function executeRun(deps: ExecutorDeps, scenario: Scenario, run: Ru
     run = { ...run, status: summarize(results), finishedAt: now() };
   } catch (e) {
     run = { ...run, status: 'error', error: (e as Error).message, finishedAt: now() };
+    log({ level: 'error', message: (e as Error).message });
   } finally {
     const video = page?.video();
     await page?.context().close().catch(() => {});
@@ -348,7 +353,7 @@ export async function executeRun(deps: ExecutorDeps, scenario: Scenario, run: Ru
       }
       if (videoTmp) await fs.rm(videoTmp, { recursive: true, force: true }).catch(() => {});
     }
-    await browser.close().catch(() => {});
+    await browser?.close().catch(() => {});
   }
   log({ level: run.status === 'passed' ? 'info' : 'warn', message: `Run ${run.status}` });
   update(run);
@@ -390,13 +395,22 @@ export class RunQueue {
   constructor(
     private deps: ExecutorDeps,
     private concurrency = 2,
-  ) {}
+  ) {
+    // Runs left over from a server that stopped mid-run would otherwise show "running" forever.
+    for (const run of deps.store.listUnfinishedRuns()) {
+      deps.store.saveRun({ ...run, status: 'error', error: 'The server stopped before this run finished', finishedAt: now() });
+    }
+  }
 
   enqueue(scenario: Scenario): Run {
     const run: Run = { id: newId('run'), scenarioId: scenario.id, status: 'queued', startedAt: now() };
     this.deps.store.saveRun(run);
     this.pending.push(async () => {
-      await executeRun(this.deps, scenario, run);
+      // A failed run must not take the server down (an unhandled rejection exits Node).
+      await executeRun(this.deps, scenario, run).catch((e) => {
+        this.deps.store.saveRun({ ...run, status: 'error', error: (e as Error).message, finishedAt: now() });
+        runEvents.emit('update', run.id);
+      });
     });
     this.pump();
     return run;
