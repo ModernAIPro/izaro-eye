@@ -100,7 +100,7 @@ export function Home() {
 
       {summaries && summaries.length > 0 && (
         <section>
-          <h2 className="home-section">Your projects</h2>
+          <h2 className="home-section">Pick a project</h2>
           <div className="home-projects">
             {summaries.map(({ project, scenarios, lastRun }) => (
               <Link key={project.id} to={`/projects/${project.id}`} className="home-project">
@@ -114,6 +114,10 @@ export function Home() {
                 </span>
               </Link>
             ))}
+            <Link to="/projects/new" className="home-project home-project-new">
+              <span className="home-step-icon">+</span>
+              <strong>New project</strong>
+            </Link>
           </div>
         </section>
       )}

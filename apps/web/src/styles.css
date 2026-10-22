@@ -364,3 +364,4 @@ tr.clickable:hover td { background: color-mix(in srgb, var(--accent) 8%, transpa
   .home-eye { width: 96px; height: 96px; }
   .home-steps { grid-template-columns: 1fr; }
 }
+.home-project-new { align-items: center; justify-content: center; border-style: dashed; color: var(--accent); }
