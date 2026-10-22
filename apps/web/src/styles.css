@@ -11,22 +11,37 @@
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   color: var(--text);
   background: var(--bg);
+  color-scheme: light;
 }
+/* Dark follows the system unless the theme toggle picked one (data-theme on <html>). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #12151c;
     --panel: #1b2029;
     --text: #e6e9ef;
     --muted: #949cad;
     --border: #2c3340;
     --accent: #6d8cff;
+    color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+    --bg: #12151c;
+  --panel: #1b2029;
+  --text: #e6e9ef;
+  --muted: #949cad;
+  --border: #2c3340;
+  --accent: #6d8cff;
+  color-scheme: dark;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); }
 a { color: var(--accent); text-decoration: none; }
 code { font-size: 12px; background: color-mix(in srgb, var(--border) 50%, transparent); padding: 1px 4px; border-radius: 3px; word-break: break-all; }
 .topbar { display: flex; align-items: baseline; gap: 16px; padding: 12px 24px; border-bottom: 1px solid var(--border); background: var(--panel); }
+.topbar .theme-toggle { margin-left: auto; align-self: center; }
+.theme-toggle { background: transparent; color: var(--muted); border-color: var(--border); padding: 4px 10px; font-size: 13px; }
+.theme-toggle:hover { color: var(--accent); border-color: var(--accent); }
 .brand { font-weight: 700; font-size: 18px; color: var(--text); }
 .tagline, .muted { color: var(--muted); }
 .content { padding: 24px; max-width: 1400px; margin: 0 auto; }

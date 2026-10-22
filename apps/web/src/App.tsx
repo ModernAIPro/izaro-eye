@@ -7,6 +7,7 @@ import { ScenarioEditor } from './pages/ScenarioEditor';
 import { StepEditor } from './pages/StepEditor';
 import { RunRedirect } from './pages/RunDetail';
 import { Home } from './pages/Home';
+import { ThemeToggle } from './components/ThemeToggle';
 import { LogsPane } from './workspace/LogsPane';
 import { ProjectTree } from './workspace/ProjectTree';
 import { RunStreamProvider, SidePaneContext } from './workspace/RunStream';
@@ -47,6 +48,7 @@ export function App() {
               izaro-eye
             </Link>
             <span className="tagline">record screens · write scenarios · run visually</span>
+            <ThemeToggle />
           </header>
           <aside className="pane pane-left">
             <ProjectTree />
