@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.izaro.server</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/dechrish/Library/pnpm/bin/pnpm</string>
+        <string>--filter</string>
+        <string>@izaro/server</string>
+        <string>start</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>DATA_DIR</key>
+        <string>/Users/dechrish/izaro-data</string>
+        <!-- Must include the folder that holds `node` (check with `which node`). -->
+        <key>PATH</key>
+        <string>/Users/dechrish/Library/pnpm/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <!-- Wait 10s between restarts if it keeps crashing. -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+    <key>WorkingDirectory</key>
+    <string>/Users/dechrish/izaro-eye</string>
+    <key>StandardOutPath</key>
+    <string>/Users/dechrish/izaro-data/server.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/dechrish/izaro-data/server-error.log</string>
+</dict>
+</plist>

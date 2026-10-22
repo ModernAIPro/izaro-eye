@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.izaro.tunnel</string>
+    <!-- Use the path from `which cloudflared`: /usr/local/bin on Intel Macs, /opt/homebrew/bin on Apple silicon. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/cloudflared</string>
+        <string>tunnel</string>
+        <string>--config</string>
+        <string>/Users/dechrish/.cloudflared/config.yml</string>
+        <string>run</string>
+        <string>izaro-eye</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+    <key>StandardOutPath</key>
+    <string>/Users/dechrish/izaro-data/tunnel.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/dechrish/izaro-data/tunnel-error.log</string>
+</dict>
+</plist>
