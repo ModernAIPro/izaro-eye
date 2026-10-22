@@ -42,7 +42,8 @@ export function App() {
       <SidePaneContext.Provider value={{ slot, claim }}>
         <div className="workspace" style={{ '--left': `${left.size}px`, '--right': `${right.size}px` } as CSSProperties}>
           <header className="topbar">
-            <Link to="/" className="brand">
+            <Link to="/" className="brand" title="Home">
+              <img src="/favicon.svg" alt="" />
               izaro-eye
             </Link>
             <span className="tagline">record screens · write scenarios · run visually</span>
