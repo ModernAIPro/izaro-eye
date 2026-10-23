@@ -26,6 +26,19 @@ export function newContext(browser: Browser, project: Project, opts: { videoDir?
   });
 }
 
+/**
+ * Does an input that may start a page load (a link, a form submit, Enter in a form)
+ * and, if it does, waits for the new page to load. Otherwise the next screenshot
+ * lands mid-navigation, where Chromium can stall it until it times out.
+ */
+export async function withNavigation(page: Page, input: () => Promise<void>): Promise<void> {
+  const main = page.mainFrame();
+  const started = page.waitForRequest((r) => r.isNavigationRequest() && r.frame() === main, { timeout: 500 }).catch(() => undefined);
+  const loaded = page.waitForEvent('load', { timeout: 30_000 }).catch(() => undefined);
+  await input();
+  if (await started) await loaded;
+}
+
 export function screenshot(page: Page): Promise<Buffer> {
   return page.screenshot({ animations: 'disabled', caret: 'hide', scale: 'css' });
 }
