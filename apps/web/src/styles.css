@@ -278,7 +278,8 @@ body.resizing-y, body.resizing-y * { cursor: row-resize !important; user-select:
 
 .settings { display: flex; flex-direction: column; gap: 18px; margin-top: 12px; }
 .setting h3 { margin: 0 0 4px; font-size: 15px; }
-.setting .row input[type=password] { width: 320px; max-width: 100%; }
+.setting .row input[type=password],
+.setting .row input[type=text] { width: 320px; max-width: 100%; }
 .setting.danger { border-top: 1px solid var(--border); padding-top: 16px; }
 button.danger { background: var(--fail); border-color: var(--fail); color: #fff; }
 .setting .confirm { border: 1px solid var(--fail); border-radius: 6px; padding: 10px 14px; background: color-mix(in srgb, var(--fail) 6%, transparent); }

@@ -18,7 +18,7 @@ import {
   type LogEntry,
   type StepResult,
 } from '@izaro/shared';
-import { crop, launchBrowser, newContext, screenshot, settle } from '../browser.js';
+import { crop, launchBrowser, newContext, screenshot, settle, withNavigation } from '../browser.js';
 import { compareScreenshots } from '../compare/index.js';
 import type { Vision } from '../compare/jev.js';
 import { LoggedVision } from '../compare/logged.js';
@@ -140,7 +140,7 @@ export class Executor {
   }
 
   private async clickRect(r: Rect) {
-    await this.page.mouse.click(Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2));
+    await withNavigation(this.page, () => this.page.mouse.click(Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)));
   }
 
   /** Performs one action. Returns the outcome, or throws StepFailure. */
@@ -154,7 +154,7 @@ export class Executor {
         await this.page.waitForTimeout(action.seconds * 1000);
         return { status: 'passed' };
       case 'press':
-        await this.page.keyboard.press(action.key);
+        await withNavigation(this.page, () => this.page.keyboard.press(action.key));
         return { status: 'passed' };
       case 'scroll':
         await this.page.mouse.wheel(0, (action.direction === 'down' ? 1 : -1) * Math.round(this.viewport().height * 0.75));
