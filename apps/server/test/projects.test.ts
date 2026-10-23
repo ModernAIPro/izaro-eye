@@ -48,6 +48,16 @@ describe('project settings', () => {
     expect(cleared.typesafeKey).toBeUndefined();
   });
 
+  it('renames a project and refuses a blank name', async () => {
+    const p = await create();
+    const renamed = await app.inject({ method: 'PUT', url: `/api/projects/${p.id}`, payload: { name: '  Checkout flow  ' } });
+    expect(renamed.json()).toMatchObject({ name: 'Checkout flow', baseUrl: p.baseUrl });
+    expect((await app.inject({ method: 'GET', url: `/api/projects/${p.id}` })).json().name).toBe('Checkout flow');
+
+    expect((await app.inject({ method: 'PUT', url: `/api/projects/${p.id}`, payload: { name: '   ' } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'GET', url: `/api/projects/${p.id}` })).json().name).toBe('Checkout flow');
+  });
+
   it('deletes a project with its scenarios', async () => {
     const p = await create();
     const s = (await app.inject({ method: 'POST', url: `/api/projects/${p.id}/scenarios`, payload: { name: 'S', steps: [{ text: 'Scroll down' }] } })).json() as Scenario;

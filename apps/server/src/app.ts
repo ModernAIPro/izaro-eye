@@ -138,7 +138,10 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
       const p = mustProject(req.params.id);
       const b = req.body ?? {};
       const next: Project = { ...p };
-      if (b.name?.trim()) next.name = b.name.trim();
+      if (b.name !== undefined) {
+        if (!b.name?.trim()) throw badRequest('name cannot be empty');
+        next.name = b.name.trim();
+      }
       if (b.baseUrl?.trim()) next.baseUrl = b.baseUrl.trim();
       if (b.viewport) next.viewport = b.viewport;
       // null or '' clears it (JSON has no undefined).

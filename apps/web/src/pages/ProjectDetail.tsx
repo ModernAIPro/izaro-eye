@@ -180,7 +180,7 @@ function ScreenCard({ screen, onSaved }: { screen: Screen; onSaved: () => void }
   );
 }
 
-/** Project-level settings: its own TypeSafe key, and deleting the project. No browser dialogs; confirmations are in the page. */
+/** Project-level settings: its name, its own TypeSafe key, and deleting the project. No browser dialogs; confirmations are in the page. */
 function ProjectSettings({
   project,
   scenarioCount,
@@ -193,6 +193,7 @@ function ProjectSettings({
   onChange: (p: Project) => void;
 }) {
   const navigate = useNavigate();
+  const [name, setName] = useState(project.name);
   const [editingKey, setEditingKey] = useState(false);
   const [key, setKey] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -227,8 +228,46 @@ function ProjectSettings({
     }
   };
 
+  const saveName = async () => {
+    setError('');
+    setBusy(true);
+    try {
+      const p = await api<Project>(`/projects/${project.id}`, { method: 'PUT', json: { name } });
+      onChange(p);
+      setName(p.name);
+      window.dispatchEvent(new Event(PROJECTS_CHANGED));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="settings">
+      <section className="setting">
+        <h3>Project name</h3>
+        <form
+          className="row"
+          onSubmit={(e) => {
+            e.preventDefault();
+            saveName();
+          }}
+        >
+          <input type="text" aria-label="Project name" value={name} onChange={(e) => setName(e.target.value)} />
+          {name.trim() !== project.name && (
+            <>
+              <button type="submit" disabled={busy || !name.trim()}>
+                Save
+              </button>
+              <button type="button" className="secondary" onClick={() => setName(project.name)}>
+                Cancel
+              </button>
+            </>
+          )}
+        </form>
+      </section>
+
       <section className="setting">
         <h3>TypeSafe API key</h3>
         <p className="muted small">
